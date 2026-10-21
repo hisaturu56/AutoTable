@@ -33,7 +33,8 @@
 
         cornerRadius: 0,               // マス目の角丸（0 で角丸なし）
 
-        rough: { enabled: true, size: 1, detail: 100 },  // ラフ（入力値・ギザギザ）。enabled はダイアログの初期値
+        // ラフ：サイズ 1 px（入力値）、詳細 100/inch、ギザギザ。マスの長方形だけにかけ、文字と画像にはかけない
+        rough: { enabled: true, size: 1, detail: 100 },  // enabled はダイアログの初期値
 
         colors: {                      // RGB（新しく作るときの色）
             outer:  [128, 128, 128],
@@ -169,6 +170,9 @@
         }
     }
 
+    // マスの長方形だけを選択して終わる（ラフが効いていなければ「効果 → 最後の効果を適用」でまとめてかけられる）
+    doc.selection = null;
+    for (var s = 0; s < roughTargets.length; s++) roughTargets[s].selected = true;
     app.redraw();
 
     var exported = null;
