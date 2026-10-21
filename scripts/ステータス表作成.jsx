@@ -17,11 +17,14 @@
  */
 (function () {
     var CONFIG = {
-        outer:  { w: 1500, h: 590 },   // ① 外枠（下地・背景）
-        header: { w: 1490, h: 30 },    // ② ヘッダー
-        body:   { w: 1490, h: 545 },   // ③ 表の本体（マス目になる範囲）
-        edgeMargin: 5,                 // 外枠の上下フチからヘッダー／本体までの余白
-        gap: 5,                        // マス同士の間隔
+        // サイズと位置はイラレの表示と同じ値（基準点＝中心、Y はアートボードの上端から下向き）
+        outer:  { w: 1505, h: 592.5, x: 960, y: 545 },      // 下地
+        header: { w: 1490, h: 30,    x: 960, y: 271.25 },   // ヘッダー
+        body:   { w: 1490, h: 540,   x: 960, y: 563.75 },   // テーブル（マス目になる範囲）
+        gap: 7.5,                      // マス同士の間隔
+
+        // このレイヤーがドキュメントにあれば、その長方形を使う（「テーブル」の長方形をマス目に加工する）
+        layerNames: { outer: "下地", header: "ヘッダー", table: "テーブル" },
 
         defaultRows: 6,                // ダイアログの初期値：行数（CSV を使わないとき）
         defaultCols: 5,                // ダイアログの初期値：列数（キャラ欄は含まない）
@@ -32,7 +35,7 @@
 
         rough: { enabled: true, size: 1, detail: 100 },  // ラフ（入力値・ギザギザ）。enabled はダイアログの初期値
 
-        colors: {                      // RGB
+        colors: {                      // RGB（新しく作るときの色）
             outer:  [128, 128, 128],
             header: [48, 48, 48],
             cell:   [48, 48, 48],
@@ -56,8 +59,7 @@
             valign: "top"              // キャラ画像をマスに合わせる位置："top"（顔が見えやすい）／"center"
         },
 
-        defaultExport: true,           // ダイアログの初期値：PNG で書き出す
-        separateLayers: true           // true: 1マス1レイヤー／false: 「テーブル」レイヤー1つにまとめる
+        defaultExport: true            // ダイアログの初期値：PNG で書き出す
     };
 
     var opts = showDialog();
@@ -80,27 +82,51 @@
     var doc = app.documents.length ? app.activeDocument
                                    : app.documents.add(DocumentColorSpace.RGB, 1920, 1080);
 
-    // アクティブなアートボードの中央を基準にする [左, 上, 右, 下]（Y は上が大きい）
+    // アクティブなアートボード [左, 上, 右, 下]（スクリプトの座標は Y が上向き）
     var abIndex = doc.artboards.getActiveArtboardIndex();
     var ab = doc.artboards[abIndex].artboardRect;
-    var cx = (ab[0] + ab[2]) / 2;
-    var cy = (ab[1] + ab[3]) / 2;
 
-    // ---- 位置計算 ----
-    var outerLeft = cx - CONFIG.outer.w / 2;
-    var outerTop  = cy + CONFIG.outer.h / 2;
+    var cellFont   = findFont(CONFIG.text.font);
+    var headerFont = findFont(CONFIG.headerText.font);
+    var missingImages = [];
+    var roughTargets = [];
 
-    var headerLeft = cx - CONFIG.header.w / 2;
-    var headerTop  = outerTop - CONFIG.edgeMargin;
+    // ---- 下地・ヘッダー・テーブル：あれば使い、なければ作る ----
+    var tableLayer = findLayer(CONFIG.layerNames.table);
+    var templateRect = tableLayer && tableLayer.pathItems.length ? tableLayer.pathItems[0] : null;
+    var outerRect, headerRect, body;
 
-    var bodyLeft = cx - CONFIG.body.w / 2;
-    var bodyTop  = (outerTop - CONFIG.outer.h + CONFIG.edgeMargin) + CONFIG.body.h;
+    if (tableLayer && !templateRect) {
+        alert("「" + CONFIG.layerNames.table + "」レイヤーに長方形がありません。\n"
+            + "すでにマス目になっている場合は、元の長方形に戻してから実行してください。");
+        return;
+    }
 
-    // 行の高さ：例）6行なら (545 - 5×5) ÷ 6 = 86.6667。キャラ欄はこの高さの正方形
-    var cellH = (CONFIG.body.h - CONFIG.gap * (opts.rows - 1)) / opts.rows;
+    if (templateRect) {
+        var headerLayer = findLayer(CONFIG.layerNames.header);
+        var outerLayer  = findLayer(CONFIG.layerNames.outer);
+        headerRect = headerLayer && headerLayer.pathItems.length ? headerLayer.pathItems[0] : null;
+        outerRect  = outerLayer && outerLayer.pathItems.length ? outerLayer.pathItems[0] : null;
+        body = boundsToBox(templateRect.geometricBounds);
+    } else {
+        outerRect = makeLayerRect(CONFIG.layerNames.outer, CONFIG.outer, CONFIG.colors.outer);
+        headerRect = makeLayerRect(CONFIG.layerNames.header, CONFIG.header, CONFIG.colors.header);
+        roughTargets.push(outerRect, headerRect);
+        tableLayer = doc.layers.add();
+        tableLayer.name = CONFIG.layerNames.table;
+        body = specToBox(CONFIG.body);
+    }
 
-    var statX = opts.character ? bodyLeft + cellH + CONFIG.gap : bodyLeft;
-    var statW = (bodyLeft + CONFIG.body.w) - statX;
+    if (opts.headerTitle && headerRect) {
+        addHeaderTitle(headerRect.layer, opts.headerTitle, boundsToBox(headerRect.geometricBounds));
+    }
+
+    // ---- マス目の計算 ----
+    // 行の高さ：例）6行なら (540 - 7.5×5) ÷ 6 = 83.75。キャラ欄はこの高さの正方形
+    var cellH = (body.h - CONFIG.gap * (opts.rows - 1)) / opts.rows;
+
+    var statX = opts.character ? body.left + cellH + CONFIG.gap : body.left;
+    var statW = (body.left + body.w) - statX;
     var colW  = (statW - CONFIG.gap * (opts.cols - 1)) / opts.cols;
 
     if (cellH <= 0 || colW <= 0) {
@@ -108,44 +134,25 @@
         return;
     }
 
-    // ---- 作成（先に作ったものほどレイヤーの下になる） ----
-    var tableLayer = null;
-    if (!CONFIG.separateLayers) {
-        tableLayer = doc.layers.add();
-        tableLayer.name = "テーブル";
-    }
-
-    var cellFont   = findFont(CONFIG.text.font);
-    var headerFont = findFont(CONFIG.headerText.font);
-    var missingImages = [];
-
-    var rects = [];
-    var outer = makeRect("外枠", outerTop, outerLeft, CONFIG.outer.w, CONFIG.outer.h, 0, CONFIG.colors.outer);
-    rects.push(outer);
-    var header = makeRect("ヘッダー", headerTop, headerLeft, CONFIG.header.w, CONFIG.header.h, 0, CONFIG.colors.header);
-    rects.push(header);
-    if (opts.headerTitle) {
-        addHeaderTitle(header.layer, opts.headerTitle);
-    }
-
+    // ---- マスを作る（1マス＝1グループ：長方形・画像・文字） ----
+    var cells = [];
     for (var r = 0; r < opts.rows; r++) {
-        var top = bodyTop - r * (cellH + CONFIG.gap);
+        var top = body.top - r * (cellH + CONFIG.gap);
         var row = data ? data[r] : [];
         var col = 0;
         if (opts.character) {
-            var charCell = makeRect("行" + (r + 1) + "_キャラ", top, bodyLeft, cellH, cellH, CONFIG.cornerRadius, CONFIG.colors.cell);
-            rects.push(charCell);
-            if (row[0]) placeImage(charCell.layer, row[0], top, bodyLeft, cellH, cellH);
+            var charCell = makeCell("行" + (r + 1) + "_キャラ", top, body.left, cellH, cellH);
+            if (row[0]) placeImage(charCell.group, row[0], top, body.left, cellH, cellH);
             col = 1;
         }
         for (var c = 0; c < opts.cols; c++) {
             var left = statX + c * (colW + CONFIG.gap);
-            var cell = makeRect("行" + (r + 1) + "_列" + (c + 1), top, left, colW, cellH, CONFIG.cornerRadius, CONFIG.colors.cell);
-            rects.push(cell);
+            var cell = makeCell("行" + (r + 1) + "_列" + (c + 1), top, left, colW, cellH);
             var value = row[col + c];
-            if (value) addCellText(cell.layer, value, top, left, colW, cellH);
+            if (value) addCellText(cell.group, value, top, left, colW, cellH);
         }
     }
+    if (templateRect) templateRect.remove();  // 元の「テーブル」の長方形はマス目に置き換える
 
     var roughFailed = false;
     if (opts.rough) {
@@ -153,9 +160,9 @@
                      + 'R size ' + CONFIG.rough.size
                      + ' R detail ' + CONFIG.rough.detail
                      + ' I absoluteness 1 I roundness 0 "/></LiveEffect>';
-        for (var i = 0; i < rects.length; i++) {
+        for (var i = 0; i < roughTargets.length; i++) {
             try {
-                rects[i].applyEffect(roughXML);
+                roughTargets[i].applyEffect(roughXML);
             } catch (e) {
                 roughFailed = true;
             }
@@ -166,7 +173,7 @@
 
     var exported = null;
     if (opts.exportPNG) {
-        exported = exportTablePNG(outer, opts.csvFile);
+        exported = exportTablePNG(outerRect ? [outerRect] : cells, opts.csvFile);
     }
 
     var msg = "ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
@@ -308,14 +315,44 @@
         }
     }
 
-    function makeRect(name, top, left, w, h, radius, rgb) {
-        var container = tableLayer;
-        if (CONFIG.separateLayers) {
-            container = doc.layers.add();
-            container.name = name;
+    function findLayer(name) {
+        try {
+            return doc.layers.getByName(name);
+        } catch (e) {
+            return null;
         }
-        var p = radius > 0 ? container.pathItems.roundedRectangle(top, left, w, h, radius, radius)
-                           : container.pathItems.rectangle(top, left, w, h);
+    }
+
+    // イラレ表示の値（中心・Y 下向き）をスクリプトの座標（左上・Y 上向き）に変換する
+    function specToBox(spec) {
+        return { left: ab[0] + spec.x - spec.w / 2, top: ab[1] - (spec.y - spec.h / 2), w: spec.w, h: spec.h };
+    }
+
+    function boundsToBox(b) {
+        return { left: b[0], top: b[1], w: b[2] - b[0], h: b[1] - b[3] };
+    }
+
+    function makeLayerRect(layerName, spec, rgb) {
+        var layer = doc.layers.add();
+        layer.name = layerName;
+        var box = specToBox(spec);
+        return styleRect(layer.pathItems.rectangle(box.top, box.left, box.w, box.h), layerName, rgb);
+    }
+
+    function makeCell(name, top, left, w, h) {
+        var g = tableLayer.groupItems.add();
+        g.name = name;
+        var radius = CONFIG.cornerRadius;
+        var p = radius > 0 ? g.pathItems.roundedRectangle(top, left, w, h, radius, radius)
+                           : g.pathItems.rectangle(top, left, w, h);
+        styleRect(p, name, CONFIG.colors.cell);
+        roughTargets.push(p);
+        var cell = { group: g, rect: p };
+        cells.push(p);
+        return cell;
+    }
+
+    function styleRect(p, name, rgb) {
         p.name = name;
         p.stroked = false;
         p.filled = true;
@@ -323,8 +360,8 @@
         return p;
     }
 
-    function addCellText(layer, value, top, left, w, h) {
-        var tf = layer.textFrames.add();
+    function addCellText(container, value, top, left, w, h) {
+        var tf = container.textFrames.add();
         tf.contents = CONFIG.text.formatNumbers ? formatNumber(value) : value;
         styleText(tf, cellFont, CONFIG.text.size);
         tf.textRange.paragraphAttributes.justification = Justification.CENTER;
@@ -337,12 +374,12 @@
         return tf;
     }
 
-    function addHeaderTitle(layer, title) {
+    function addHeaderTitle(layer, title, box) {
         var tf = layer.textFrames.add();
         tf.contents = title;
         tf.name = "ヘッダーの文字";
         styleText(tf, headerFont, CONFIG.headerText.size);
-        alignByGlyphs(tf, headerLeft + CONFIG.headerText.left, headerTop - CONFIG.header.h / 2, "left");
+        alignByGlyphs(tf, box.left + CONFIG.headerText.left, box.top - box.h / 2, "left");
         return tf;
     }
 
@@ -369,13 +406,13 @@
     }
 
     // 画像をマスいっぱいに拡大・縮小し、マスの形でクリップする
-    function placeImage(layer, path, top, left, w, h) {
+    function placeImage(container, path, top, left, w, h) {
         var file = resolveFile(path);
         if (!file.exists) {
             missingImages.push(path);
             return null;
         }
-        var g = layer.groupItems.add();
+        var g = container.groupItems.add();
         g.name = "画像";
         var img = g.placedItems.add();
         img.file = file;
@@ -397,12 +434,16 @@
     }
 
     // 表の部分だけを PNG で書き出す（一時的に表ぴったりのアートボードを作る）
-    function exportTablePNG(outerItem, csvFile) {
+    function exportTablePNG(items, csvFile) {
         var defaultName = csvFile ? decodeURI(csvFile.name).replace(/\.csv$/i, "") + ".png" : "ステータス表.png";
         var dest = (csvFile ? new File(csvFile.parent.fsName + "/" + defaultName) : new File(defaultName)).saveDlg("PNG の保存先", "*.png");
         if (!dest) return null;
 
-        var vb = outerItem.visibleBounds;  // ラフで少しはみ出す分も含める
+        var vb = items[0].visibleBounds;  // ラフで少しはみ出す分も含める
+        for (var k = 1; k < items.length; k++) {
+            var b = items[k].visibleBounds;
+            vb = [Math.min(vb[0], b[0]), Math.max(vb[1], b[1]), Math.max(vb[2], b[2]), Math.min(vb[3], b[3])];
+        }
         var rect = [Math.floor(vb[0]), Math.ceil(vb[1]), Math.ceil(vb[2]), Math.floor(vb[3])];
         var tmp = doc.artboards.add(rect);
         var tmpIndex = doc.artboards.length - 1;
