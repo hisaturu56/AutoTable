@@ -157,10 +157,13 @@
 
     var roughFailed = false;
     if (opts.rough) {
+        // asiz：入力値のサイズ／size：パーセントのサイズ／absoluteness 1：入力値／dtal：詳細／roundness 0：ギザギザ
         var roughXML = '<LiveEffect name="Adobe Roughen"><Dict data="'
-                     + 'R size ' + CONFIG.rough.size
-                     + ' R detail ' + CONFIG.rough.detail
-                     + ' I absoluteness 1 I roundness 0 "/></LiveEffect>';
+                     + 'R asiz ' + CONFIG.rough.size
+                     + ' R size ' + CONFIG.rough.size
+                     + ' R absoluteness 1'
+                     + ' R dtal ' + CONFIG.rough.detail
+                     + ' R roundness 0 "/></LiveEffect>';
         for (var i = 0; i < roughTargets.length; i++) {
             try {
                 roughTargets[i].applyEffect(roughXML);
