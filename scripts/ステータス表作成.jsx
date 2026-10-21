@@ -1,12 +1,19 @@
 ﻿#target illustrator
 /*
  * ステータス表作成.jsx
- * キャラクター用の基礎ステータス表を自動で作成する（AE/Premiere 用に1パーツ1レイヤーで出力）
+ * キャラクター用の基礎ステータス表を自動で作成する
  *
  * 使い方：Illustrator で ファイル → スクリプト → その他のスクリプト… からこのファイルを選択
- *        ダイアログで「行数」「列数」「キャラ欄の有無」を選んで OK
- *        （ドキュメントが開いていなければ 1920×1080 の RGB ドキュメントを新規作成します）
- * サイズや色を変えたいときは、下の CONFIG を書き換えてください。単位はすべて px です。
+ *   - 「CSVを選ぶ…」でデータを選ぶと、行数・列数はデータから自動で決まり、文字と画像も入る
+ *   - CSV を選ばなければ、行数・列数を指定して空の表を作る
+ *   （ドキュメントが開いていなければ 1920×1080 の RGB ドキュメントを新規作成します）
+ *
+ * CSV の形式（UTF-8）：CSV の1行がそのまま表の1行になる。1行目は項目名の行
+ *   キャラ欄ありのときは、1列目が画像ファイルのパス（CSV からの相対パスか絶対パス。空欄なら画像なし）
+ *   images/無限大ロゴ.png,キャラクター,HP,攻撃力,防御力,エネルギー
+ *   images/タフィー.png,タフィー,3088,5088,4353,3618
+ *
+ * サイズや色、フォントを変えたいときは、下の CONFIG を書き換えてください。単位はすべて px です。
  */
 (function () {
     var CONFIG = {
@@ -16,9 +23,10 @@
         edgeMargin: 5,                 // 外枠の上下フチからヘッダー／本体までの余白
         gap: 5,                        // マス同士の間隔
 
-        defaultRows: 6,                // ダイアログの初期値：行数
-        defaultCols: 5,                // ダイアログの初期値：ステータス欄の列数（キャラ欄は含まない）
+        defaultRows: 6,                // ダイアログの初期値：行数（CSV を使わないとき）
+        defaultCols: 5,                // ダイアログの初期値：列数（キャラ欄は含まない）
         defaultCharacter: true,        // ダイアログの初期値：キャラ欄あり
+        defaultHeaderTitle: "CHARACTER BASE STATS",
 
         cornerRadius: 0,               // マス目の角丸（0 で角丸なし）
 
@@ -27,20 +35,54 @@
         colors: {                      // RGB
             outer:  [128, 128, 128],
             header: [48, 48, 48],
-            cell:   [48, 48, 48]
+            cell:   [48, 48, 48],
+            text:   [215, 215, 215]
         },
 
-        separateLayers: true           // true: 1パーツ1レイヤー（動画用）／false: 「テーブル」レイヤー1つにまとめる
+        text: {
+            font: "KozGoPr6N-Bold",    // マスの文字のフォント（PostScript 名）。見つからなければ既定のフォント
+            size: 48,                  // マスの文字サイズ（マスに入りきらなければ自動で縮める）
+            padding: 12,               // マスの左右に空ける余白
+            formatNumbers: true        // 数字だけの値に 3 桁区切りのカンマを付ける（3088 → 3,088）
+        },
+
+        headerText: {
+            font: "KozGoPr6N-Heavy",
+            size: 26,
+            left: 12                   // ヘッダー左端からの位置
+        },
+
+        image: {
+            valign: "top"              // キャラ画像をマスに合わせる位置："top"（顔が見えやすい）／"center"
+        },
+
+        defaultExport: true,           // ダイアログの初期値：PNG で書き出す
+        separateLayers: true           // true: 1マス1レイヤー／false: 「テーブル」レイヤー1つにまとめる
     };
 
     var opts = showDialog();
     if (!opts) return;
 
+    var data = null;
+    if (opts.csvFile) {
+        data = readCSV(opts.csvFile);
+        if (!data) return;
+        opts.rows = data.length;
+        var maxLen = 0;
+        for (var d = 0; d < data.length; d++) maxLen = Math.max(maxLen, data[d].length);
+        opts.cols = maxLen - (opts.character ? 1 : 0);
+        if (opts.cols < 1) {
+            alert("CSV の列が足りません。キャラ欄ありのときは「画像」の列も含めてください。");
+            return;
+        }
+    }
+
     var doc = app.documents.length ? app.activeDocument
                                    : app.documents.add(DocumentColorSpace.RGB, 1920, 1080);
 
     // アクティブなアートボードの中央を基準にする [左, 上, 右, 下]（Y は上が大きい）
-    var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect;
+    var abIndex = doc.artboards.getActiveArtboardIndex();
+    var ab = doc.artboards[abIndex].artboardRect;
     var cx = (ab[0] + ab[2]) / 2;
     var cy = (ab[1] + ab[3]) / 2;
 
@@ -73,18 +115,35 @@
         tableLayer.name = "テーブル";
     }
 
-    var items = [];
-    items.push(makeRect("外枠", outerTop, outerLeft, CONFIG.outer.w, CONFIG.outer.h, 0, CONFIG.colors.outer));
-    items.push(makeRect("ヘッダー", headerTop, headerLeft, CONFIG.header.w, CONFIG.header.h, 0, CONFIG.colors.header));
+    var cellFont   = findFont(CONFIG.text.font);
+    var headerFont = findFont(CONFIG.headerText.font);
+    var missingImages = [];
+
+    var rects = [];
+    var outer = makeRect("外枠", outerTop, outerLeft, CONFIG.outer.w, CONFIG.outer.h, 0, CONFIG.colors.outer);
+    rects.push(outer);
+    var header = makeRect("ヘッダー", headerTop, headerLeft, CONFIG.header.w, CONFIG.header.h, 0, CONFIG.colors.header);
+    rects.push(header);
+    if (opts.headerTitle) {
+        addHeaderTitle(header.layer, opts.headerTitle);
+    }
 
     for (var r = 0; r < opts.rows; r++) {
         var top = bodyTop - r * (cellH + CONFIG.gap);
+        var row = data ? data[r] : [];
+        var col = 0;
         if (opts.character) {
-            items.push(makeRect("行" + (r + 1) + "_キャラ", top, bodyLeft, cellH, cellH, CONFIG.cornerRadius, CONFIG.colors.cell));
+            var charCell = makeRect("行" + (r + 1) + "_キャラ", top, bodyLeft, cellH, cellH, CONFIG.cornerRadius, CONFIG.colors.cell);
+            rects.push(charCell);
+            if (row[0]) placeImage(charCell.layer, row[0], top, bodyLeft, cellH, cellH);
+            col = 1;
         }
         for (var c = 0; c < opts.cols; c++) {
             var left = statX + c * (colW + CONFIG.gap);
-            items.push(makeRect("行" + (r + 1) + "_列" + (c + 1), top, left, colW, cellH, CONFIG.cornerRadius, CONFIG.colors.cell));
+            var cell = makeRect("行" + (r + 1) + "_列" + (c + 1), top, left, colW, cellH, CONFIG.cornerRadius, CONFIG.colors.cell);
+            rects.push(cell);
+            var value = row[col + c];
+            if (value) addCellText(cell.layer, value, top, left, colW, cellH);
         }
     }
 
@@ -94,9 +153,9 @@
                      + 'R size ' + CONFIG.rough.size
                      + ' R detail ' + CONFIG.rough.detail
                      + ' I absoluteness 1 I roundness 0 "/></LiveEffect>';
-        for (var i = 0; i < items.length; i++) {
+        for (var i = 0; i < rects.length; i++) {
             try {
-                items[i].applyEffect(roughXML);
+                rects[i].applyEffect(roughXML);
             } catch (e) {
                 roughFailed = true;
             }
@@ -104,48 +163,149 @@
     }
 
     app.redraw();
-    alert("ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
-        + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? "、ラフあり" : "、ラフなし")
-        + "、" + items.length + " パーツ）\n"
-        + "マスの高さ：" + round(cellH) + " px ／ ステータス欄の列幅：" + round(colW) + " px"
-        + (roughFailed ? "\n\n※ラフ効果を適用できませんでした。効果メニューから手動で適用してください。" : ""));
+
+    var exported = null;
+    if (opts.exportPNG) {
+        exported = exportTablePNG(outer, opts.csvFile);
+    }
+
+    var msg = "ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
+            + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? "、ラフあり" : "、ラフなし") + "）\n"
+            + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px";
+    if (exported) msg += "\n\nPNG を書き出しました：\n" + exported.fsName;
+    if (!cellFont) msg += "\n\n※フォント「" + CONFIG.text.font + "」が見つからないため、既定のフォントを使いました。";
+    if (missingImages.length) msg += "\n\n※見つからなかった画像：\n" + missingImages.join("\n");
+    if (roughFailed) msg += "\n\n※ラフ効果を適用できませんでした。効果メニューから手動で適用してください。";
+    alert(msg);
+
+    // ================================================================
 
     function showDialog() {
         var dlg = new Window("dialog", "ステータス表作成");
-        dlg.alignChildren = "left";
+        dlg.alignChildren = "fill";
 
-        var g1 = dlg.add("group");
+        var dataPanel = dlg.add("panel", undefined, "データ");
+        dataPanel.alignChildren = "left";
+        var csvLabel = dataPanel.add("statictext", undefined, "（CSV を選ばないと空の表を作ります）");
+        csvLabel.characters = 40;
+        var csvBtns = dataPanel.add("group");
+        var pickBtn  = csvBtns.add("button", undefined, "CSVを選ぶ…");
+        var clearBtn = csvBtns.add("button", undefined, "クリア");
+
+        var sizePanel = dlg.add("panel", undefined, "サイズ（CSV を使わないとき）");
+        sizePanel.alignChildren = "left";
+        var g1 = sizePanel.add("group");
         g1.add("statictext", undefined, "行数：");
         var rowsInput = g1.add("edittext", undefined, String(CONFIG.defaultRows));
         rowsInput.characters = 4;
-
-        var g2 = dlg.add("group");
+        var g2 = sizePanel.add("group");
         g2.add("statictext", undefined, "列数：");
         var colsInput = g2.add("edittext", undefined, String(CONFIG.defaultCols));
         colsInput.characters = 4;
         g2.add("statictext", undefined, "（キャラ欄を除く）");
 
-        var charCheck = dlg.add("checkbox", undefined, "左端にキャラ欄（正方形）を入れる");
+        var optPanel = dlg.add("panel", undefined, "オプション");
+        optPanel.alignChildren = "left";
+        var charCheck = optPanel.add("checkbox", undefined, "左端にキャラ欄（正方形）を入れる");
         charCheck.value = CONFIG.defaultCharacter;
-
-        var roughCheck = dlg.add("checkbox", undefined, "ラフ効果をかける（手描き風のギザギザ）");
+        var g3 = optPanel.add("group");
+        g3.add("statictext", undefined, "ヘッダーの文字：");
+        var titleInput = g3.add("edittext", undefined, CONFIG.defaultHeaderTitle);
+        titleInput.characters = 24;
+        var roughCheck = optPanel.add("checkbox", undefined, "ラフ効果をかける（手描き風のギザギザ）");
         roughCheck.value = CONFIG.rough.enabled;
+        var exportCheck = optPanel.add("checkbox", undefined, "作成後に表の部分を PNG で書き出す");
+        exportCheck.value = CONFIG.defaultExport;
 
         var btns = dlg.add("group");
         btns.alignment = "right";
         btns.add("button", undefined, "キャンセル", { name: "cancel" });
         btns.add("button", undefined, "OK", { name: "ok" });
 
-        rowsInput.active = true;
+        var csvFile = null;
+        pickBtn.onClick = function () {
+            var f = File.openDialog("CSV ファイルを選んでください", "*.csv");
+            if (f) {
+                csvFile = f;
+                csvLabel.text = decodeURI(f.name);
+                sizePanel.enabled = false;
+            }
+        };
+        clearBtn.onClick = function () {
+            csvFile = null;
+            csvLabel.text = "（CSV を選ばないと空の表を作ります）";
+            sizePanel.enabled = true;
+        };
+
         if (dlg.show() !== 1) return null;
 
         var rows = parseInt(rowsInput.text, 10);
         var cols = parseInt(colsInput.text, 10);
-        if (!(rows >= 1) || !(cols >= 1)) {
+        if (!csvFile && (!(rows >= 1) || !(cols >= 1))) {
             alert("行数・列数には1以上の整数を入力してください。");
             return null;
         }
-        return { rows: rows, cols: cols, character: charCheck.value, rough: roughCheck.value };
+        return {
+            csvFile: csvFile,
+            rows: rows,
+            cols: cols,
+            character: charCheck.value,
+            headerTitle: trim(titleInput.text),
+            rough: roughCheck.value,
+            exportPNG: exportCheck.value
+        };
+    }
+
+    function readCSV(file) {
+        file.encoding = "UTF-8";
+        if (!file.open("r")) {
+            alert("CSV を開けませんでした：\n" + file.fsName);
+            return null;
+        }
+        var text = file.read();
+        file.close();
+        if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
+
+        var rows = parseCSV(text);
+        if (!rows.length) {
+            alert("CSV にデータがありません。");
+            return null;
+        }
+        return rows;
+    }
+
+    // ダブルクォートで囲んだ値（カンマや改行を含む値）にも対応する
+    function parseCSV(text) {
+        var rows = [], row = [], field = "", quoted = false;
+        for (var i = 0; i < text.length; i++) {
+            var ch = text.charAt(i);
+            if (quoted) {
+                if (ch === '"') {
+                    if (text.charAt(i + 1) === '"') { field += '"'; i++; }
+                    else quoted = false;
+                } else {
+                    field += ch;
+                }
+            } else if (ch === '"') {
+                quoted = true;
+            } else if (ch === ",") {
+                row.push(trim(field)); field = "";
+            } else if (ch === "\n") {
+                row.push(trim(field)); field = "";
+                pushRow(rows, row); row = [];
+            } else if (ch !== "\r") {
+                field += ch;
+            }
+        }
+        row.push(trim(field));
+        pushRow(rows, row);
+        return rows;
+    }
+
+    function pushRow(rows, row) {
+        for (var i = 0; i < row.length; i++) {
+            if (row[i] !== "") { rows.push(row); return; }
+        }
     }
 
     function makeRect(name, top, left, w, h, radius, rgb) {
@@ -163,12 +323,129 @@
         return p;
     }
 
+    function addCellText(layer, value, top, left, w, h) {
+        var tf = layer.textFrames.add();
+        tf.contents = CONFIG.text.formatNumbers ? formatNumber(value) : value;
+        styleText(tf, cellFont, CONFIG.text.size);
+        tf.textRange.paragraphAttributes.justification = Justification.CENTER;
+
+        var maxW = w - CONFIG.text.padding * 2;
+        if (tf.width > maxW) {
+            tf.textRange.characterAttributes.size = CONFIG.text.size * maxW / tf.width;
+        }
+        alignByGlyphs(tf, left + w / 2, top - h / 2, "center");
+        return tf;
+    }
+
+    function addHeaderTitle(layer, title) {
+        var tf = layer.textFrames.add();
+        tf.contents = title;
+        tf.name = "ヘッダーの文字";
+        styleText(tf, headerFont, CONFIG.headerText.size);
+        alignByGlyphs(tf, headerLeft + CONFIG.headerText.left, headerTop - CONFIG.header.h / 2, "left");
+        return tf;
+    }
+
+    function styleText(tf, font, size) {
+        var attr = tf.textRange.characterAttributes;
+        if (font) attr.textFont = font;
+        attr.size = size;
+        attr.fillColor = rgbColor(CONFIG.colors.text);
+    }
+
+    // 文字の見た目（アウトライン化した形）を基準に位置を合わせる
+    function alignByGlyphs(tf, x, y, hAlign) {
+        var b;
+        try {
+            var outline = tf.duplicate().createOutline();
+            b = outline.geometricBounds;
+            outline.remove();
+        } catch (e) {
+            b = tf.geometricBounds;
+        }
+        var dx = hAlign === "left" ? x - b[0] : x - (b[0] + b[2]) / 2;
+        var dy = y - (b[1] + b[3]) / 2;
+        tf.translate(dx, dy);
+    }
+
+    // 画像をマスいっぱいに拡大・縮小し、マスの形でクリップする
+    function placeImage(layer, path, top, left, w, h) {
+        var file = resolveFile(path);
+        if (!file.exists) {
+            missingImages.push(path);
+            return null;
+        }
+        var g = layer.groupItems.add();
+        g.name = "画像";
+        var img = g.placedItems.add();
+        img.file = file;
+
+        var scale = Math.max(w / img.width, h / img.height) * 100;
+        img.resize(scale, scale);
+        var imgTop = CONFIG.image.valign === "center" ? top - (h - img.height) / 2 : top;
+        img.position = [left + (w - img.width) / 2, imgTop];
+
+        g.pathItems.rectangle(top, left, w, h);  // グループの一番上のパスがクリップに使われる
+        g.clipped = true;
+        return g;
+    }
+
+    function resolveFile(path) {
+        var f = new File(path);
+        if (f.exists || !opts.csvFile) return f;
+        return new File(opts.csvFile.parent.fsName + "/" + path);
+    }
+
+    // 表の部分だけを PNG で書き出す（一時的に表ぴったりのアートボードを作る）
+    function exportTablePNG(outerItem, csvFile) {
+        var defaultName = csvFile ? decodeURI(csvFile.name).replace(/\.csv$/i, "") + ".png" : "ステータス表.png";
+        var dest = (csvFile ? new File(csvFile.parent.fsName + "/" + defaultName) : new File(defaultName)).saveDlg("PNG の保存先", "*.png");
+        if (!dest) return null;
+
+        var vb = outerItem.visibleBounds;  // ラフで少しはみ出す分も含める
+        var rect = [Math.floor(vb[0]), Math.ceil(vb[1]), Math.ceil(vb[2]), Math.floor(vb[3])];
+        var tmp = doc.artboards.add(rect);
+        var tmpIndex = doc.artboards.length - 1;
+        doc.artboards.setActiveArtboardIndex(tmpIndex);
+
+        var o = new ExportOptionsPNG24();
+        o.antiAliasing = true;
+        o.transparency = true;
+        o.artBoardClipping = true;
+        o.horizontalScale = 100;
+        o.verticalScale = 100;
+        try {
+            doc.exportFile(dest, ExportType.PNG24, o);
+        } finally {
+            doc.artboards.setActiveArtboardIndex(abIndex);
+            tmp.remove();
+        }
+        return dest;
+    }
+
+    function findFont(name) {
+        try {
+            return app.textFonts.getByName(name);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function formatNumber(s) {
+        if (!/^-?\d{4,}$/.test(s)) return s;
+        return s.replace(/\B(?=(\d{3})+$)/g, ",");
+    }
+
     function rgbColor(rgb) {
         var col = new RGBColor();
         col.red = rgb[0];
         col.green = rgb[1];
         col.blue = rgb[2];
         return col;
+    }
+
+    function trim(s) {
+        return String(s).replace(/^\s+|\s+$/g, "");
     }
 
     function round(n) {
