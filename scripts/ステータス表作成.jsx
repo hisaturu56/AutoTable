@@ -37,8 +37,8 @@
         rough: { enabled: true, size: 1, detail: 100 },  // enabled はダイアログの初期値
 
         colors: {                      // RGB（新しく作るときの色）
-            outer:  [128, 128, 128],
-            header: [48, 48, 48],
+            outer:  [224, 224, 224],   // #E0E0E0
+            header: [77, 77, 77],      // #4D4D4D
             cell:   [48, 48, 48],
             text:   [215, 215, 215]
         },
@@ -92,10 +92,9 @@
     var missingImages = [];
     var roughTargets = [];
 
-    // ---- 下地・ヘッダー・テーブル：あれば使い、なければ作る ----
+    // ---- 下地・ヘッダー・テーブル：レイヤーごとに、あれば使い、なければ作る（作ったものにはラフをかける） ----
     var tableLayer = findLayer(CONFIG.layerNames.table);
     var templateRect = tableLayer && tableLayer.pathItems.length ? tableLayer.pathItems[0] : null;
-    var outerRect, headerRect, body;
 
     if (tableLayer && !templateRect) {
         alert("「" + CONFIG.layerNames.table + "」レイヤーに長方形がありません。\n"
@@ -103,16 +102,13 @@
         return;
     }
 
+    // 下から 下地 → ヘッダー → テーブル の順に重なるように作る
+    var outerRect  = existingOrNewRect(CONFIG.layerNames.outer, CONFIG.outer, CONFIG.colors.outer);
+    var headerRect = existingOrNewRect(CONFIG.layerNames.header, CONFIG.header, CONFIG.colors.header);
+    var body;
     if (templateRect) {
-        var headerLayer = findLayer(CONFIG.layerNames.header);
-        var outerLayer  = findLayer(CONFIG.layerNames.outer);
-        headerRect = headerLayer && headerLayer.pathItems.length ? headerLayer.pathItems[0] : null;
-        outerRect  = outerLayer && outerLayer.pathItems.length ? outerLayer.pathItems[0] : null;
         body = boundsToBox(templateRect.geometricBounds);
     } else {
-        outerRect = makeLayerRect(CONFIG.layerNames.outer, CONFIG.outer, CONFIG.colors.outer);
-        headerRect = makeLayerRect(CONFIG.layerNames.header, CONFIG.header, CONFIG.colors.header);
-        roughTargets.push(outerRect, headerRect);
         tableLayer = doc.layers.add();
         tableLayer.name = CONFIG.layerNames.table;
         body = specToBox(CONFIG.body);
@@ -339,11 +335,24 @@
         return { left: b[0], top: b[1], w: b[2] - b[0], h: b[1] - b[3] };
     }
 
-    function makeLayerRect(layerName, spec, rgb) {
-        var layer = doc.layers.add();
-        layer.name = layerName;
+    function existingOrNewRect(layerName, spec, rgb) {
+        var layer = findLayer(layerName);
+        if (layer && layer.pathItems.length) return layer.pathItems[0];
+
+        if (!layer) {
+            layer = doc.layers.add();
+            layer.name = layerName;
+            // 既存のレイヤーを隠さないように重なり順を整える（下地は一番下、ヘッダーはテーブルのすぐ下）
+            if (layerName === CONFIG.layerNames.outer) {
+                layer.zOrder(ZOrderMethod.SENDTOBACK);
+            } else if (tableLayer) {
+                layer.move(tableLayer, ElementPlacement.PLACEAFTER);
+            }
+        }
         var box = specToBox(spec);
-        return styleRect(layer.pathItems.rectangle(box.top, box.left, box.w, box.h), layerName, rgb);
+        var p = styleRect(layer.pathItems.rectangle(box.top, box.left, box.w, box.h), layerName, rgb);
+        roughTargets.push(p);
+        return p;
     }
 
     function makeCell(name, top, left, w, h) {
