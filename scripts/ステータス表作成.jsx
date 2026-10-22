@@ -29,7 +29,6 @@
         defaultRows: 6,                // ダイアログの初期値：行数（CSV を使わないとき）
         defaultCols: 5,                // ダイアログの初期値：列数（キャラ欄は含まない）
         defaultCharacter: true,        // ダイアログの初期値：キャラ欄あり
-        defaultHeaderTitle: "CHARACTER BASE STATS",
 
         cornerRadius: 0,               // マス目の角丸（0 で角丸なし）
 
@@ -43,17 +42,21 @@
             text:   [215, 215, 215]
         },
 
+        // マスの文字。フォントが見つからなければ既定のフォント。マスに入りきらなければ自動で縮める
+        // ヘッダーの帯の文字は AE でアニメーションさせるので、ここでは入れない
         text: {
-            font: "KozGoPr6N-Bold",    // マスの文字のフォント（PostScript 名）。見つからなければ既定のフォント
-            size: 48,                  // マスの文字サイズ（マスに入りきらなければ自動で縮める）
+            family: "Noto Sans JP", style: "Black",
+            size: 40,                  // 参考画像の「タフィー」の高さ（約 36 px）に合わせた値
             padding: 12,               // マスの左右に空ける余白
             formatNumbers: true        // 数字だけの値に 3 桁区切りのカンマを付ける（3088 → 3,088）
         },
 
-        headerText: {
-            font: "KozGoPr6N-Heavy",
-            size: 26,
-            left: 12                   // ヘッダー左端からの位置
+        // 数字だけの値の文字。縦位置はカンマを除いた数字の高さで中央に合わせる
+        //（カンマが下にはみ出す分、全体で中央に合わせると上に寄って見えるため）
+        number: {
+            family: "Bahnschrift", style: "Bold",
+            size: 46,                  // 参考画像の数字の高さ（カンマを除いて約 32 px）に合わせた値
+            offsetY: 0                 // さらに下げたいときは正の値（px）
         },
 
         image: {
@@ -87,8 +90,11 @@
     var abIndex = doc.artboards.getActiveArtboardIndex();
     var ab = doc.artboards[abIndex].artboardRect;
 
-    var cellFont   = findFont(CONFIG.text.font);
-    var headerFont = findFont(CONFIG.headerText.font);
+    var textFont   = findFont(CONFIG.text.family, CONFIG.text.style);
+    var numberFont = findFont(CONFIG.number.family, CONFIG.number.style);
+    var missingFonts = [];
+    if (!textFont) missingFonts.push(CONFIG.text.family + " " + CONFIG.text.style);
+    if (!numberFont) missingFonts.push(CONFIG.number.family + " " + CONFIG.number.style);
     var missingImages = [];
     var roughTargets = [];
 
@@ -114,9 +120,6 @@
         body = specToBox(CONFIG.body);
     }
 
-    if (opts.headerTitle && headerRect) {
-        addHeaderTitle(headerRect.layer, opts.headerTitle, boundsToBox(headerRect.geometricBounds));
-    }
 
     // ---- マス目の計算 ----
     // 行の高さ：例）6行なら (540 - 7.5×5) ÷ 6 = 83.75。キャラ欄はこの高さの正方形
@@ -183,7 +186,7 @@
             + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? "、ラフあり" : "、ラフなし") + "）\n"
             + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px";
     if (exported) msg += "\n\nPNG を書き出しました：\n" + exported.fsName;
-    if (!cellFont) msg += "\n\n※フォント「" + CONFIG.text.font + "」が見つからないため、既定のフォントを使いました。";
+    if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
     if (missingImages.length) msg += "\n\n※見つからなかった画像：\n" + missingImages.join("\n");
     if (roughFailed) msg += "\n\n※ラフ効果を適用できませんでした。効果メニューから手動で適用してください。";
     alert(msg);
@@ -218,10 +221,6 @@
         optPanel.alignChildren = "left";
         var charCheck = optPanel.add("checkbox", undefined, "左端にキャラ欄（正方形）を入れる");
         charCheck.value = CONFIG.defaultCharacter;
-        var g3 = optPanel.add("group");
-        g3.add("statictext", undefined, "ヘッダーの文字：");
-        var titleInput = g3.add("edittext", undefined, CONFIG.defaultHeaderTitle);
-        titleInput.characters = 24;
         var roughCheck = optPanel.add("checkbox", undefined, "ラフ効果をかける（手描き風のギザギザ）");
         roughCheck.value = CONFIG.rough.enabled;
         var exportCheck = optPanel.add("checkbox", undefined, "作成後に表の部分を PNG で書き出す");
@@ -260,7 +259,6 @@
             rows: rows,
             cols: cols,
             character: charCheck.value,
-            headerTitle: trim(titleInput.text),
             rough: roughCheck.value,
             exportPNG: exportCheck.value
         };
@@ -377,25 +375,25 @@
     }
 
     function addCellText(container, value, top, left, w, h) {
+        var text = CONFIG.text.formatNumbers ? formatNumber(value) : value;
+        var isNumber = /^-?[\d,]+(\.\d+)?$/.test(text);
+        var size = isNumber ? CONFIG.number.size : CONFIG.text.size;
+
         var tf = container.textFrames.add();
-        tf.contents = CONFIG.text.formatNumbers ? formatNumber(value) : value;
-        styleText(tf, cellFont, CONFIG.text.size);
+        tf.contents = text;
+        styleText(tf, isNumber ? numberFont : textFont, size);
         tf.textRange.paragraphAttributes.justification = Justification.CENTER;
 
         var maxW = w - CONFIG.text.padding * 2;
         if (tf.width > maxW) {
-            tf.textRange.characterAttributes.size = CONFIG.text.size * maxW / tf.width;
+            tf.textRange.characterAttributes.size = size * maxW / tf.width;
         }
-        alignByGlyphs(tf, left + w / 2, top - h / 2, "center");
-        return tf;
-    }
-
-    function addHeaderTitle(layer, title, box) {
-        var tf = layer.textFrames.add();
-        tf.contents = title;
-        tf.name = "ヘッダーの文字";
-        styleText(tf, headerFont, CONFIG.headerText.size);
-        alignByGlyphs(tf, box.left + CONFIG.headerText.left, box.top - box.h / 2, "left");
+        if (isNumber) {
+            // 縦位置はカンマ・小数点を除いた数字だけの形で中央に合わせる
+            alignByGlyphs(tf, left + w / 2, top - h / 2 - CONFIG.number.offsetY, text.replace(/[,.]/g, ""));
+        } else {
+            alignByGlyphs(tf, left + w / 2, top - h / 2);
+        }
         return tf;
     }
 
@@ -406,19 +404,26 @@
         attr.fillColor = rgbColor(CONFIG.colors.text);
     }
 
-    // 文字の見た目（アウトライン化した形）を基準に位置を合わせる
-    function alignByGlyphs(tf, x, y, hAlign) {
-        var b;
+    // 文字の見た目（アウトライン化した形）の中心を (x, y) に合わせる
+    // verticalText を渡すと、縦位置はその文字列の形で測る（同じ書式・同じベースラインのまま）
+    function alignByGlyphs(tf, x, y, verticalText) {
+        var b = outlineBounds(tf, null);
+        var vb = verticalText ? outlineBounds(tf, verticalText) : b;
+        tf.translate(x - (b[0] + b[2]) / 2, y - (vb[1] + vb[3]) / 2);
+    }
+
+    function outlineBounds(tf, contents) {
+        var dup = tf.duplicate();
         try {
-            var outline = tf.duplicate().createOutline();
-            b = outline.geometricBounds;
+            if (contents !== null) dup.contents = contents;
+            var outline = dup.createOutline();
+            var b = outline.geometricBounds;
             outline.remove();
+            return b;
         } catch (e) {
-            b = tf.geometricBounds;
+            try { dup.remove(); } catch (e2) {}
+            return tf.geometricBounds;
         }
-        var dx = hAlign === "left" ? x - b[0] : x - (b[0] + b[2]) / 2;
-        var dy = y - (b[1] + b[3]) / 2;
-        tf.translate(dx, dy);
     }
 
     // 画像をマスいっぱいに拡大・縮小し、マスの形でクリップする
@@ -480,9 +485,14 @@
         return dest;
     }
 
-    function findFont(name) {
+    // フォント名（ファミリー名とスタイル名）でフォントを探す。見つからなければ PostScript 名でも探す
+    function findFont(family, style) {
+        for (var i = 0; i < app.textFonts.length; i++) {
+            var f = app.textFonts[i];
+            if (f.family === family && f.style === style) return f;
+        }
         try {
-            return app.textFonts.getByName(name);
+            return app.textFonts.getByName(family.replace(/\s+/g, "") + "-" + style);  // 例：NotoSansJP-Black
         } catch (e) {
             return null;
         }
