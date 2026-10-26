@@ -10,6 +10,7 @@
 $.global.PT = (function () {  // $.evalFile で読み込んでも、どこからでも PT で呼べるように
     var IMAGE_LAYER = "キャラ画像";
     var TABLE_LAYER = "テーブル";
+    var ROUGH_SIZE = 1;  // ラフの大きさ（px。ポロライドテーブル自動作成の CONFIG.rough.size と同じ）
     var NUMBER_RATIO = 46 / 40;  // 数字の大きさ ÷ 文字の大きさ（ポロライドテーブル自動作成の CONFIG と同じ割合）
     var MATERIAL_FOLDER = "素材";
     var IMAGE_FILTER = "画像:*.png;*.jpg;*.jpeg;*.psd;*.tif;*.tiff;*.ai;*.eps;*.pdf;*.svg";
@@ -157,6 +158,16 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         return null;
     }
 
+    // マスの { left, top, w, h }。ラフを固定したマス（点がたくさんある形）は、ギザギザの分（1 px）だけ内側にする
+    function cellBox(shape) {
+        var b = shape.geometricBounds;
+        var inset = 0;
+        try {
+            if (shape.typename !== "PathItem" || shape.pathPoints.length > 4) inset = ROUGH_SIZE;
+        } catch (e) {}
+        return { left: b[0] + inset, top: b[1] - inset, w: b[2] - b[0] - inset * 2, h: b[1] - b[3] - inset * 2 };
+    }
+
     // アートボードの表のラフを固定する（「アピアランスを分割」。前のバージョンで作った表を軽くするため）
     function fixRough(board) {
         var doc = activeDoc();
@@ -245,8 +256,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
                     if (!r || has[r[1]]) continue;
                     var shape = cellShape(cell);
                     if (!shape) continue;
-                    var b = shape.geometricBounds;
-                    list.push({ parent: container, row: parseInt(r[1], 10), box: { left: b[0], top: b[1], w: b[2] - b[0], h: b[1] - b[3] } });
+                    list.push({ parent: container, row: parseInt(r[1], 10), box: cellBox(shape) });
                 }
             }
             for (var j = 0; j < layers.length; j++) {
@@ -277,11 +287,19 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
                      : File.openDialog("入れる画像を選ぶ（行" + cell.row + "）", IMAGE_FILTER, false);
         if (!f) return json(null);
 
+        var g = placeInCell(cell.parent, cell.row, cell.box, f);
+        app.redraw();
+        return json({ name: g.name, logo: cell.row === 1 });
+    }
+
+    // キャラ欄のマスに画像を入れる（表を作るときと同じ入れ方。1 行目はロゴとして切り抜かずに収める）
+    //   parent：表のレイヤー（中に「キャラ画像」レイヤーを作る）、box：マスの { left, top, w, h }
+    function placeInCell(parent, row, box, f) {
         // 同じ表の「キャラ画像」レイヤー（なければ作って、表の中のいちばん上へ）
         var layer = null;
-        try { layer = cell.parent.layers.getByName(IMAGE_LAYER); } catch (e) { layer = null; }
+        try { layer = parent.layers.getByName(IMAGE_LAYER); } catch (e) { layer = null; }
         if (!layer) {
-            layer = cell.parent.layers.add();
+            layer = parent.layers.add();
             layer.name = IMAGE_LAYER;
             layer.zOrder(ZOrderMethod.BRINGTOFRONT);
         }
@@ -290,18 +308,18 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         for (var i = 0; i < layer.groupItems.length; i++) {
             var other = layer.groupItems[i];
             var m = /^行(\d+)_/.exec(other.name);
-            if (other !== g && m && parseInt(m[1], 10) > cell.row) {
+            if (other !== g && m && parseInt(m[1], 10) > row) {
                 g.move(other, ElementPlacement.PLACEBEFORE);
                 break;
             }
             if (i === layer.groupItems.length - 1) g.move(layer, ElementPlacement.PLACEATEND);
         }
-        g.name = "行" + cell.row + "_" + decodeURI(f.name).replace(/\.[^.]+$/, "");
+        g.name = "行" + row + "_" + decodeURI(f.name).replace(/\.[^.]+$/, "");
         var img = g.placedItems.add();
         img.file = f;
-        var b = cell.box;
-        if (cell.row === 1) {
-            var pad = 15;  // ロゴの余白（ポロライドテーブル自動作成の image.logoPadding と同じ）
+        var b = box;
+        if (row === 1) {
+            var pad = 15;  // ロゴの余白
             var s = Math.min((b.w - pad * 2) / img.width, (b.h - pad * 2) / img.height) * 100;
             img.resize(s, s);
             img.position = [b.left + (b.w - img.width) / 2, b.top - (b.h - img.height) / 2];
@@ -312,8 +330,132 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
             g.pathItems.rectangle(b.top, b.left, b.w, b.h);       // グループのいちばん上のパスで切り抜く
             g.clipped = true;
         }
+        return g;
+    }
+
+    // 表の「キャラ画像」レイヤーの、行 row の画像（グループ）。なければ null
+    function rowImage(parent, row) {
+        var layer = null;
+        try { layer = parent.layers.getByName(IMAGE_LAYER); } catch (e) { return null; }
+        for (var i = 0; i < layer.groupItems.length; i++) {
+            var m = /^行(\d+)_/.exec(layer.groupItems[i].name);
+            if (m && parseInt(m[1], 10) === row) return layer.groupItems[i];
+        }
+        return null;
+    }
+
+    // アートボードの表のキャラ欄を全部集める：[{ parent, row, box, label, note, image }]
+    function charCells(doc, board) {
+        var r = doc.artboards[board].artboardRect;
+        var list = [];
+        (function walk(container) {
+            var table = null;
+            for (var i = 0; i < container.layers.length; i++) if (container.layers[i].name === TABLE_LAYER) table = container.layers[i];
+            if (table) {
+                var texts = {};
+                for (var t = 0; t < table.groupItems.length; t++) {
+                    var tm = /^行(\d+)_列1$/.exec(table.groupItems[t].name);
+                    if (tm && table.groupItems[t].textFrames.length) texts[tm[1]] = table.groupItems[t].textFrames[0].contents;
+                }
+                for (var c = 0; c < table.groupItems.length; c++) {
+                    var cell = table.groupItems[c];
+                    var m = /^行(\d+)_キャラ$/.exec(cell.name);
+                    if (!m) continue;
+                    var shape = cellShape(cell);
+                    if (!shape) continue;
+                    var box = cellBox(shape);
+                    var cx = box.left + box.w / 2, cy = box.top - box.h / 2;
+                    if (cx < r[0] || cx > r[2] || cy > r[1] || cy < r[3]) continue;
+                    var row = parseInt(m[1], 10);
+                    list.push({ parent: container, row: row, box: box,
+                                label: texts[m[1]] || "", note: cell.note || "", image: rowImage(container, row) });
+                }
+            }
+            for (var j = 0; j < container.layers.length; j++) {
+                if (container.layers[j].name !== TABLE_LAYER && container.layers[j].name !== IMAGE_LAYER) walk(container.layers[j]);
+            }
+        })(doc);
+        list.sort(function (a, b) { return a.row - b.row; });
+        return list;
+    }
+
+    // アートボードの表のキャラ欄に、画像をまとめて入れる・変える画面
+    //   表を作るときに CSV・Notion に書いてあった画像のファイル名（マスのメモ）が「素材」フォルダにあれば、最初から入る予定にしておく
+    //   今の画像は「そのまま」にしておけば、調整した位置・大きさも残る
+    function bulkImages(board) {
+        var doc = activeDoc();
+        if (!doc || !doc.artboards[board]) return json(null);
+        var cells = charCells(doc, board);
+        if (!cells.length) return json({ none: true });
+        var folder = materialFolder(false);
+        var filter = $.os.indexOf("Windows") >= 0 ? IMAGE_FILTER : function (f) {
+            return f instanceof Folder || /\.(png|jpe?g|psd|tiff?|ai|eps|pdf|svg)$/i.test(f.name);
+        };
+
+        var dlg = new Window("dialog", "キャラ画像をまとめて入れる・変える");
+        dlg.alignChildren = "fill";
+        dlg.add("statictext", undefined, "「" + doc.artboards[board].name + "」のキャラ欄に入れる画像を選んでください");
+        var panel = dlg.add("panel", undefined, "キャラ欄");
+        panel.alignChildren = "fill";
+        var states = [];
+        for (var i = 0; i < cells.length; i++) states.push(addRow(panel, cells[i]));
+        dlg.add("statictext", undefined, "「そのまま」の画像は、調整した位置・大きさも変わりません。「選ぶ…」は「素材」フォルダから開きます");
+        var btns = dlg.add("group");
+        btns.alignment = "right";
+        btns.add("button", undefined, "OK", { name: "ok" });
+        btns.add("button", undefined, "キャンセル", { name: "cancel" });
+        if (dlg.show() !== 1) return json(null);
+
+        var placed = 0, removed = 0;
+        for (var k = 0; k < cells.length; k++) {
+            var st = states[k], cell = cells[k];
+            if (st.action === "keep") continue;
+            if (cell.image) { cell.image.remove(); removed++; }
+            if (st.action === "set") { placeInCell(cell.parent, cell.row, cell.box, st.file); placed++; }
+        }
         app.redraw();
-        return json({ name: g.name, logo: cell.row === 1 });
+        return json({ placed: placed, removed: removed });
+
+        function addRow(parent, cell) {
+            var st = { action: "keep", file: null };
+            var g = parent.add("group");
+            var lbl = g.add("statictext", undefined, cell.row === 1 ? "1行目（ロゴ）" : cell.row + "行目　" + cell.label);
+            lbl.preferredSize.width = 170;
+            var text;
+            if (cell.image) {
+                text = cell.image.name.replace(/^行\d+_/, "") + "（そのまま）";
+            } else if (cell.note) {
+                var f = folder ? new File(folder.fsName + "/" + cell.note) : null;
+                if (f && f.exists) {
+                    st = { action: "set", file: f };
+                    text = cell.note + "（入れる）";
+                } else {
+                    text = "（なし）見つかりません：" + cell.note;
+                }
+            } else {
+                text = "（なし）";
+            }
+            var nameText = g.add("statictext", undefined, text);
+            nameText.preferredSize.width = 280;
+            var pick = g.add("button", undefined, "選ぶ…");
+            var none = g.add("button", undefined, "なし");
+            pick.onClick = function () {
+                var from = st.file ? st.file.parent : folder;
+                var f = from ? from.openDlg("画像を選ぶ（" + (cell.row === 1 ? "ロゴ" : cell.label || cell.row + "行目") + "）", filter, false)
+                             : File.openDialog("画像を選ぶ", filter, false);
+                if (!f) return;
+                st.action = "set";
+                st.file = f;
+                if (f.parent) folder = f.parent;  // 次の行も同じフォルダから開く
+                nameText.text = decodeURI(f.name) + "（入れる）";
+            };
+            none.onClick = function () {
+                st.action = cell.image ? "remove" : "keep";
+                st.file = null;
+                nameText.text = cell.image ? "（なし）今の画像を外す" : "（なし）";
+            };
+            return st;
+        }
     }
 
     // 画像の今の値（拡大率・横・縦）と、スライダーの範囲
@@ -582,6 +724,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         getTextSize: getTextSize,
         fixRough: fixRough,
         addImage: addImage,
+        bulkImages: bulkImages,
         setTextSize: setTextSize,
         createTable: createTable,
         listImages: listImages,

@@ -147,6 +147,7 @@
 
     <fieldset id="imageBox">
       <legend>キャラ画像</legend>
+      <button id="imgBulk" class="wide main">キャラ画像をまとめて入れる・変える…</button>
       <div class="row"><label class="k">画像</label><select id="image"></select></div>
       <button id="imgFromSel" class="wide">Illustrator で選択中の画像にする</button>
       <div class="row"><label class="k">拡大率 %</label><input type="range" id="zoomR" min="100" max="400" step="1"><input type="number" id="zoomN" step="any"></div>
@@ -680,10 +681,11 @@
   function setImageControls(mode) {
     var controls = $("imageBox").querySelectorAll("input, button");
     for (var i = 0; i < controls.length; i++) {
-      if (controls[i].id !== "imgFromSel" && controls[i].id !== "imgAdd") controls[i].disabled = mode !== "image";
+      if (controls[i].id !== "imgFromSel" && controls[i].id !== "imgAdd" && controls[i].id !== "imgBulk") controls[i].disabled = mode !== "image";
     }
     $("image").disabled = mode === "none";
     $("imgAdd").style.display = mode === "empty" ? "" : "none";
+    $("imgBulk").disabled = mode === "none";
   }
 
   function findEmpty(id) {
@@ -717,6 +719,27 @@
     if (String(this.value).charAt(0) === "e") selectEmpty(parseInt(this.value.slice(1), 10));
     else selectImage(parseInt(this.value, 10), true);
   });
+  // この表のキャラ欄に、画像をまとめて入れる・変える（Illustrator の画面で選ぶ）
+  $("imgBulk").addEventListener("click", function () {
+    if (currentBoard < 0) return;
+    var board = currentBoard;
+    call("PT.bulkImages(" + board + ")", function (r) {
+      if (!r) return;  // キャンセル
+      if (r.none) { setStatus("この表にはキャラ欄がありません。"); return; }
+      setStatus("キャラ画像を " + r.placed + " 枚入れました" + (r.removed ? "（前の画像を " + r.removed + " 枚外しました）" : "") + "。");
+      call("PT.listImages()", function (data) {
+        if (!data) return;
+        imageData = data;
+        imageId = -1;
+        currentBoard = -1;
+        var first = null;
+        data.images.forEach(function (img) { if (first === null && img.board === board) first = img.id; });
+        if (first !== null) selectImage(first, false);
+        else setBoard(board);
+      });
+    });
+  });
+
   // 画像なしのキャラ欄に画像を入れる
   $("imgAdd").addEventListener("click", function () {
     if (emptyId < 0) return;
