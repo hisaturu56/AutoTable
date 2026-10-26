@@ -9,6 +9,8 @@
 
 $.global.PT = (function () {  // $.evalFile で読み込んでも、どこからでも PT で呼べるように
     var IMAGE_LAYER = "キャラ画像";
+    var TABLE_LAYER = "テーブル";
+    var NUMBER_RATIO = 46 / 40;  // 数字の大きさ ÷ 文字の大きさ（ポロライドテーブル自動作成の CONFIG と同じ割合）
     var MATERIAL_FOLDER = "素材";
     var IMAGE_FILTER = "画像:*.png;*.jpg;*.jpeg;*.psd;*.tif;*.tiff;*.ai;*.eps;*.pdf;*.svg";
 
@@ -52,22 +54,82 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         return json({ message: msg || "" });
     }
 
+    // ---- 文字の大きさ ----
+
+    // アートボードの表の文字の今の大きさ（文字・数字の pt）
+    function getTextSize(board) {
+        var doc = activeDoc();
+        if (!doc || !doc.artboards[board]) return json(null);
+        var texts = tableTexts(doc, board);
+        if (!texts.length) return json({ count: 0 });
+        var text = null;
+        for (var i = 0; i < texts.length && text === null; i++) {
+            if (!texts[i].isNumber) text = texts[i].tf.textRange.characterAttributes.size;
+        }
+        if (text === null) text = texts[0].tf.textRange.characterAttributes.size / NUMBER_RATIO;
+        return json({ count: texts.length, text: text, number: text * NUMBER_RATIO });
+    }
+
+    // アートボードの表の文字を、まとめてこの大きさにする（数字は文字の 46/40 倍）。マスの中央の位置は保つ
+    function setTextSize(board, textPt) {
+        var doc = activeDoc();
+        if (!doc || !doc.artboards[board] || !(textPt > 0)) return json(null);
+        var texts = tableTexts(doc, board);
+        for (var i = 0; i < texts.length; i++) {
+            var t = texts[i];
+            var size = t.tf.textRange.characterAttributes.size;
+            var next = t.isNumber ? textPt * NUMBER_RATIO : textPt;
+            var f = next / size;
+            if (Math.abs(f - 1) < 0.0001) continue;
+            // 文字の形は基準点（中央ぞろえの行の基準点）を中心に f 倍になるので、
+            // 文字の中心（＝マスの中心）とのずれも f 倍になる分を戻して、マスの中央に保つ
+            var a = t.tf.anchor;
+            t.tf.textRange.characterAttributes.size = next;
+            t.tf.translate((t.cx - a[0]) * (1 - f), (t.cy - a[1]) * (1 - f));
+        }
+        app.redraw();
+        return getTextSize(board);
+    }
+
+    // アートボードの中にある「テーブル」レイヤーのマスの文字（マスの中心も一緒に）
+    function tableTexts(doc, board) {
+        var r = doc.artboards[board].artboardRect;
+        var list = [];
+        (function walk(layers) {
+            for (var i = 0; i < layers.length; i++) {
+                var layer = layers[i];
+                if (layer.name === TABLE_LAYER) {
+                    for (var g = 0; g < layer.groupItems.length; g++) {
+                        var group = layer.groupItems[g];
+                        if (!group.pathItems.length || !group.textFrames.length) continue;
+                        var b = group.pathItems[0].geometricBounds;
+                        var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+                        if (cx < r[0] || cx > r[2] || cy > r[1] || cy < r[3]) continue;
+                        for (var t = 0; t < group.textFrames.length; t++) {
+                            var tf = group.textFrames[t];
+                            list.push({ tf: tf, cx: cx, cy: cy, isNumber: /^-?[\d,]+(\.\d+)?$/.test(tf.contents) });
+                        }
+                    }
+                }
+                walk(layer.layers);
+            }
+        })(doc.layers);
+        return list;
+    }
+
     // ---- 画像調整 ----
 
-    // 画像の一覧：アートボード（画像がある表だけ）・画像・選択中の画像
+    // 一覧：アートボード（全部）・画像・選択中の画像
     function listImages() {
         var doc = activeDoc();
         if (!doc) return json({ boards: [], images: [], selected: -1, active: -1 });
         var targets = collectTargets(doc);
-        var boards = [], images = [];
+        var images = [];
         for (var i = 0; i < targets.length; i++) {
-            var b = artboardOf(doc, targets[i]);
-            images.push({ id: i, board: b, name: targets[i].group.name });
-            if (indexOf(boards, b) < 0) boards.push(b);
+            images.push({ id: i, board: artboardOf(doc, targets[i]), name: targets[i].group.name });
         }
-        boards.sort(function (a, c) { return a - c; });
         var boardList = [];
-        for (var k = 0; k < boards.length; k++) boardList.push({ index: boards[k], name: doc.artboards[boards[k]].name });
+        for (var k = 0; k < doc.artboards.length; k++) boardList.push({ index: k, name: doc.artboards[k].name });
         return json({
             boards: boardList,
             images: images,
@@ -338,6 +400,8 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
 
     return {
         pickCSV: pickCSV,
+        getTextSize: getTextSize,
+        setTextSize: setTextSize,
         createTable: createTable,
         listImages: listImages,
         getImage: getImage,

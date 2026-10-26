@@ -40,7 +40,7 @@
 <body>
   <div class="tabs">
     <button data-tab="create" class="on">表を作る</button>
-    <button data-tab="images">画像調整</button>
+    <button data-tab="images">調整</button>
     <button data-tab="export">書き出し</button>
   </div>
 
@@ -91,30 +91,34 @@
     <button id="createBtn" class="wide main">表を作る</button>
   </section>
 
-  <!-- ================= 画像調整 ================= -->
+  <!-- ================= 調整（文字の大きさ・キャラ画像） ================= -->
   <section id="images">
     <div class="row"><label class="k">アートボード</label><select id="board"></select></div>
-    <div class="row"><label class="k">画像</label><select id="image"></select></div>
-    <div class="grid2">
-      <button id="imgFromSel">選択中の画像にする</button>
-      <button id="imgReload">一覧を更新</button>
-    </div>
+    <button id="imgReload" class="wide">一覧を更新</button>
 
     <fieldset>
-      <legend>拡大率と位置</legend>
+      <legend>文字の大きさ（この表の文字すべて）</legend>
+      <div class="row"><label class="k">文字 pt</label><input type="range" id="textR" min="10" max="80" step="0.5"><input type="number" id="textN" step="any"></div>
+      <div class="row"><span id="textNote" class="note"></span></div>
+    </fieldset>
+
+    <fieldset id="imageBox">
+      <legend>キャラ画像</legend>
+      <div class="row"><label class="k">画像</label><select id="image"></select></div>
+      <button id="imgFromSel" class="wide">Illustrator で選択中の画像にする</button>
       <div class="row"><label class="k">拡大率 %</label><input type="range" id="zoomR" min="100" max="400" step="1"><input type="number" id="zoomN" step="any"></div>
       <div class="row"><label class="k">横 px</label><input type="range" id="xR" step="1"><input type="number" id="xN" step="any"></div>
       <div class="row"><label class="k">縦 px</label><input type="range" id="yR" step="1"><input type="number" id="yN" step="any"></div>
       <div class="note">100% ＝ マスにちょうど入る大きさ。横は右、縦は下がプラス</div>
+      <div class="grid2">
+        <button id="imgFit">マスに合わせる</button>
+        <button id="imgTop">上ぞろえ</button>
+      </div>
+      <button id="imgCopy" class="wide">同じ表の画像を全部この画像と同じにする</button>
+      <button id="imgReplace" class="wide">画像を差し替える…</button>
+      <div class="note">Illustrator で画像をクリックしてからパネルに戻ると、その画像に切り替わります</div>
     </fieldset>
-
-    <div class="grid2">
-      <button id="imgFit">マスに合わせる</button>
-      <button id="imgTop">上ぞろえ</button>
-    </div>
-    <button id="imgCopy" class="wide">同じ表の画像を全部この画像と同じにする</button>
-    <button id="imgReplace" class="wide">画像を差し替える…</button>
-    <div class="note">Illustrator で画像をクリックしてからパネルに戻ると、その画像に切り替わります。元に戻すときは Ctrl+Z</div>
+    <div class="note">元に戻すときは Ctrl+Z</div>
   </section>
 
   <!-- ================= 書き出し ================= -->
@@ -280,10 +284,52 @@
     save("create", f);
   }
 
-  // ---------------- 画像調整 ----------------
+  // ---------------- 調整（文字の大きさ・キャラ画像） ----------------
 
   var imageData = { boards: [], images: [] };
   var imageId = -1;
+  var currentBoard = -1;
+
+  // アートボードを切り替える（画像の一覧と文字の大きさも読み直す）
+  function setBoard(board) {
+    currentBoard = board;
+    $("board").value = board;
+    fillImageList(board);
+    loadText();
+  }
+
+  // ---- 文字の大きさ ----
+
+  function loadText() {
+    if (currentBoard < 0) return;
+    call("PT.getTextSize(" + currentBoard + ")", showText);
+  }
+
+  function showText(v) {
+    var has = v && v.count > 0;
+    $("textR").disabled = $("textN").disabled = !has;
+    if (!has) { $("textNote").textContent = "この表には文字がありません"; return; }
+    if (!textDragging) $("textR").value = v.text;
+    $("textN").value = round(v.text);
+    $("textNote").textContent = "数字は " + round(v.number) + " pt（文字の 46/40 倍）。" + v.count + " 個の文字をまとめて変えます";
+  }
+
+  var textDragging = false, textSending = false, textPending = null;
+  function sendText(pt) {
+    if (currentBoard < 0 || !(pt > 0)) return;
+    if (textSending) { textPending = pt; return; }
+    textSending = true;
+    call("PT.setTextSize(" + currentBoard + ", " + arg(pt) + ")", function (v) {
+      textSending = false;
+      showText(v);
+      if (textPending !== null) { var p = textPending; textPending = null; sendText(p); }
+    });
+  }
+  $("textR").addEventListener("input", function () { textDragging = true; sendText(parseFloat(this.value)); });
+  $("textR").addEventListener("change", function () { textDragging = false; });
+  $("textN").addEventListener("change", function () { sendText(parseFloat(this.value)); });
+
+  // ---- キャラ画像 ----
 
   // 一覧を読み直す。preferSelection なら Illustrator で選択中の画像を選ぶ
   function loadImages(preferSelection) {
@@ -293,18 +339,19 @@
       var board = $("board");
       board.innerHTML = "";
       data.boards.forEach(function (b) { board.add(new Option((b.index + 1) + "：" + b.name, b.index)); });
-      if (!data.images.length) {
-        $("image").innerHTML = "";
-        imageId = -1;
-        setStatus("「キャラ画像」レイヤーに、切り抜いたキャラ画像が見つかりません。");
-        return;
-      }
+      if (!data.boards.length) { setStatus("ドキュメントが開いていません。"); return; }
+      // 選ぶ画像：選択中の画像 → 今選んでいる画像 → 今のアートボードの最初の画像
       var id = preferSelection && data.selected >= 0 ? data.selected : findImage(imageId) ? imageId : -1;
       if (id < 0) {
         for (var i = 0; i < data.images.length && id < 0; i++) if (data.images[i].board === data.active) id = data.images[i].id;
       }
-      if (id < 0) id = data.images[0].id;
-      selectImage(id, false);
+      if (id >= 0) {
+        currentBoard = -1;  // 画像のアートボードに合わせて読み直す
+        selectImage(id, false);
+      } else {
+        imageId = -1;
+        setBoard(currentBoard >= 0 && currentBoard < data.boards.length ? currentBoard : data.active);
+      }
     });
   }
 
@@ -318,8 +365,7 @@
     var img = findImage(id);
     if (!img) return;
     imageId = id;
-    $("board").value = img.board;
-    fillImageList(img.board);
+    if (img.board !== currentBoard) setBoard(img.board);
     $("image").value = id;
     if (selectInIllustrator) call("PT.selectImage(" + id + ")");
     call("PT.getImage(" + id + ")", showValues);
@@ -331,10 +377,20 @@
     imageData.images.forEach(function (img) {
       if (img.board === board) list.add(new Option(img.name, img.id));
     });
+    var has = list.options.length > 0;
+    var controls = $("imageBox").querySelectorAll("select, input, button");
+    for (var i = 0; i < controls.length; i++) {
+      if (controls[i].id !== "imgFromSel") controls[i].disabled = !has;
+    }
+    if (!has) {
+      imageId = -1;
+      list.add(new Option("（この表にキャラ画像はありません）", -1));
+    }
   }
 
   $("board").addEventListener("change", function () {
     var board = parseInt(this.value, 10);
+    setBoard(board);
     var first = null;
     imageData.images.forEach(function (img) { if (first === null && img.board === board) first = img.id; });
     if (first !== null) selectImage(first, true);
