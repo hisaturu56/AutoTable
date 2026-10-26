@@ -12,6 +12,7 @@ zip の中身：
   PolaroidTable/            パネル本体（panel/ の中身 + scripts/ のスクリプト）
     jsx/create_table.jsx    scripts/ポロライドテーブル自動作成.jsx のコピー
     jsx/adjust_images.jsx   scripts/キャラ画像の調整.jsx のコピー
+    jsx/export_png.jsx      scripts/表の書き出し.jsx のコピー
 
 Windows で zip を展開したときに日本語のファイル名が化けないよう、zip の中のファイル名は英語にする。
 """
@@ -31,6 +32,7 @@ CERT_PASSWORD = "polaroidtable"  # 自己署名の証明書用（秘密の情報
 SCRIPTS = {
     "create_table.jsx": "ポロライドテーブル自動作成.jsx",
     "adjust_images.jsx": "キャラ画像の調整.jsx",
+    "export_png.jsx": "表の書き出し.jsx",
 }
 
 INSTALL = r"""@echo off
