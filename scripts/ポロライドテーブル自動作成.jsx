@@ -292,7 +292,10 @@
     msg += "\n\n" + (opts.character ? "キャラ画像を調整してから、" : "") + "パネルの「書き出し」で PNG を書き出してください。";
     if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
     if (roughFailed) msg += "\n\n※ラフ効果を適用できませんでした。効果メニューから手動で適用してください。";
-    if (panelMode) $.global.PT_RESULT = msg;  // パネルに表示する
+    if (panelMode) {
+        $.global.PT_RESULT = msg;              // パネルに表示する
+        $.global.PT_RESULT_BOARD = abIndex;    // パネルが続けて仕上げ（ラフ・画像にする）をするアートボード
+    }
     else alert(msg);
 
     // ================================================================

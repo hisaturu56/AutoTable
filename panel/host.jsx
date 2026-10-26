@@ -76,14 +76,16 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
     function createTable(scriptPath, options) {
         $.global.PT_CREATE_OPTIONS = options;
         $.global.PT_RESULT = null;
+        $.global.PT_RESULT_BOARD = null;
         try {
             $.evalFile(new File(scriptPath));
         } finally {
             $.global.PT_CREATE_OPTIONS = null;
         }
-        var msg = $.global.PT_RESULT;
+        var msg = $.global.PT_RESULT, board = $.global.PT_RESULT_BOARD;
         $.global.PT_RESULT = null;
-        return json({ message: msg || "" });
+        $.global.PT_RESULT_BOARD = null;
+        return json({ message: msg || "", board: board === null || board === undefined ? -1 : board });
     }
 
     // ---- 文字の大きさ ----

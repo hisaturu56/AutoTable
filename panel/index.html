@@ -125,9 +125,11 @@
     <fieldset>
       <legend>オプション</legend>
       <label class="c"><input type="checkbox" id="fitArtboard">アートボードを表にぴったり合わせる</label>
+      <label class="c"><input type="checkbox" id="createRough">ラフをかける</label>
+      <label class="c"><input type="checkbox" id="createRaster">画像にする（土台をくっつけて 1 枚に。いちばん軽い）</label>
       <label class="c"><input type="checkbox" id="overwrite">同じ名前の表があれば作り直す（上書き）</label>
       <div class="note">同じ名前（Notion は「台本タイトル_表の名前」、CSV はファイル名）のアートボードの表を消して、同じ位置に作り直します（空の表のときは、今のアートボードの表）</div>
-      <div class="note">表はラフなしで作ります（軽く作業できるように）。仕上げに「調整」タブの「ラフをかけて仕上げる」を押し、「書き出し」タブで PNG にします</div>
+      <div class="note">ラフ・画像にするは、表を作ったすぐあとに仕上げとしてかけます（キャラ画像と文字は画像にしないので、あとから直せます）。やり直すときは「調整」タブの「仕上げ」で</div>
     </fieldset>
 
     <button id="createBtn" class="wide main">表を作る</button>
@@ -206,7 +208,7 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var DEFAULTS = { x: 960, y: 540, w: 1505, h: 592.5, wp: 100, hp: 100,
-                   fitArtboard: true, overwrite: true };
+                   fitArtboard: true, overwrite: true, createRough: true, createRaster: true };
   var RATIOS = [
     { label: "100%（そのまま）", value: 1 },
     { label: "67%（3分の2）", value: 2 / 3 },
@@ -281,11 +283,11 @@
   ["x", "y", "w", "h", "wp", "hp"].forEach(function (k) { $(k).value = form[k]; });
   $("wpR").value = form.wp;
   $("hpR").value = form.hp;
-  ["fitArtboard", "overwrite"].forEach(function (k) { $(k).checked = !!form[k]; });
+  ["fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) { $(k).checked = !!form[k]; });
   updateCSV();
   updateSize();
 
-  ["x", "y", "w", "h", "wp", "hp", "fitArtboard", "overwrite"].forEach(function (k) {
+  ["x", "y", "w", "h", "wp", "hp", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) {
     $(k).addEventListener("input", saveForm);
     $(k).addEventListener("change", saveForm);
   });
@@ -356,6 +358,7 @@
     }
 
     var made = [];
+    var rough = $("createRough").checked, raster = $("createRaster").checked;
     busy(true, "表を作っています…");
     (function next(i) {
       if (i >= jobs.length) {
@@ -382,7 +385,13 @@
           return;
         }
         if (res.message) made.push(jobs.length === 1 ? res.message : "【" + job.name + "】" + res.message.split("\n")[0]);
-        next(i + 1);
+        // 続けて仕上げ（ラフ・画像にする）
+        if ((rough || raster) && res.board >= 0) {
+          setStatus("仕上げています…（" + (i + 1) + " / " + jobs.length + "）" + (job.csvPath || job.data ? job.name : ""));
+          call("PT.finishTable(" + res.board + ", " + rough + ", " + raster + ")", function () { next(i + 1); });
+        } else {
+          next(i + 1);
+        }
       });
     })(0);
   });
@@ -590,7 +599,7 @@
     var f = {};
     ["x", "y", "w", "h", "wp", "hp"].forEach(function (k) { f[k] = $(k).value; });
     f.wpSet = true;  // パーセントで保存した印（前の版のプルダウンの番号は使わない）
-    ["fitArtboard", "overwrite"].forEach(function (k) { f[k] = $(k).checked; });
+    ["fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) { f[k] = $(k).checked; });
     save("create", f);
   }
 
