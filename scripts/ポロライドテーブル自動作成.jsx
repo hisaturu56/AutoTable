@@ -27,10 +27,10 @@
         gap: 7.5,                      // マス同士の間隔
         // 幅・高さの割合（ダイアログのプルダウン）。入力した幅・高さにこの割合をかけた大きさで作る
         ratios: [
-            { label: "1（そのまま）", value: 1 },
-            { label: "3分の2", value: 2 / 3 },
-            { label: "2分の1", value: 1 / 2 },
-            { label: "3分の1", value: 1 / 3 }
+            { label: "100%（そのまま）", value: 1 },
+            { label: "67%（3分の2）", value: 2 / 3 },
+            { label: "50%（半分）", value: 1 / 2 },
+            { label: "33%（3分の1）", value: 1 / 3 }
         ],
         settingsFile: Folder.userData + "/PolaroidTable_layout.txt",  // 前回入力した値を覚えておくファイル
 
