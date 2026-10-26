@@ -6,6 +6,7 @@
  * 使い方：Illustrator で ファイル → スクリプト → その他のスクリプト… からこのファイルを選択
  *   - 「CSVを選ぶ…」でデータを選ぶと、行数・列数はデータから自動で決まり、文字と画像も入る
  *   - CSV を選ばなければ、行数・列数を指定して空の表を作る
+ *   - アートボードに何かあれば（2 つ目以降の表）、新しいアートボードを右に追加して作る。アートボード名は表の名前（CSV のファイル名）
  *   （ドキュメントが開いていなければ 1920×1080 の RGB ドキュメントを新規作成します）
  *
  * CSV の形式（UTF-8）：CSV の1行がそのまま表の1行になる。1行目は項目名の行
@@ -76,6 +77,9 @@
             filter: "画像:*.png;*.jpg;*.jpeg;*.psd;*.tif;*.tiff;*.ai;*.eps;*.pdf;*.svg"
         },
 
+        // 2 つ目以降の表は、新しいアートボードを右に追加して作る
+        newArtboard: { w: 1920, h: 1080, gap: 100 },
+
         defaultFitArtboard: true,      // ダイアログの初期値：アートボードを表にぴったり合わせる
         defaultExport: true,           // ダイアログの初期値：PNG で書き出す
         exportFolderName: "素材"        // Illustrator ファイルと同じ場所にあるこの名前のフォルダ。キャラ画像をここから探し、PNG もここへ保存（なければ作る）
@@ -106,6 +110,10 @@
     var abIndex = doc.artboards.getActiveArtboardIndex();
     var ab = doc.artboards[abIndex].artboardRect;
 
+    // 表の名前：CSV のファイル名（例：(テスト)表作成テスト用台本_1_基礎ステータス比較）。CSV がなければ「表1」「表2」…
+    // アートボード名・レイヤー名・PNG のファイル名に使う
+    var tableName = opts.csvFile ? decodeURI(opts.csvFile.name).replace(/\.csv$/i, "") : "";
+
     var textFont   = findFont(CONFIG.text.family, CONFIG.text.style);
     var numberFont = findFont(CONFIG.number.family, CONFIG.number.style);
     var missingFonts = [];
@@ -121,15 +129,28 @@
         if (!images) return;
     }
 
-    // ---- 下地・ヘッダー・テーブル：レイヤーごとに、あれば使い、なければ作る（作ったものにはラフをかける） ----
+    // ---- 下地・ヘッダー・テーブル ----
+    // 「テーブル」レイヤー（一番上の階層）に長方形があれば、それをマス目に加工する（手で用意した下地・ヘッダーも使う）
+    // それ以外は、表ごとに「表の名前」のレイヤーを作り、その中に 下地・ヘッダー・テーブル を作る（作ったものにはラフをかける）
+    var layerRoot = doc;
     var tableLayer = findLayer(CONFIG.layerNames.table);
     var templateRect = tableLayer && tableLayer.pathItems.length ? tableLayer.pathItems[0] : null;
+    var newArtboard = false;
 
-    if (tableLayer && !templateRect) {
-        alert("「" + CONFIG.layerNames.table + "」レイヤーに長方形がありません。\n"
-            + "すでにマス目になっている場合は、元の長方形に戻してから実行してください。");
-        return;
+    if (!templateRect) {
+        tableLayer = null;
+        // 今のアートボードにもう何かあれば（1 つ目の表など）、新しいアートボードを右に追加する
+        if (!artboardIsEmpty(abIndex)) {
+            abIndex = addArtboard();
+            ab = doc.artboards[abIndex].artboardRect;
+            newArtboard = true;
+        }
+        if (!tableName) tableName = "表" + (abIndex + 1);
+        layerRoot = doc.layers.add();
+        layerRoot.name = uniqueLayerName(tableName);
     }
+    if (!tableName) tableName = "表" + (abIndex + 1);
+    doc.artboards[abIndex].name = uniqueArtboardName(tableName, abIndex);
 
     // 下から 下地 → ヘッダー → テーブル の順に重なるように作る
     var specs = layoutSpecs(opts.layout);
@@ -139,7 +160,7 @@
     if (templateRect) {
         body = boundsToBox(templateRect.geometricBounds);
     } else {
-        tableLayer = doc.layers.add();
+        tableLayer = layerRoot.layers.add();
         tableLayer.name = CONFIG.layerNames.table;
         body = specToBox(specs.body);
     }
@@ -210,14 +231,15 @@
     }
     var exported = null;
     if (opts.exportPNG) {
-        exported = exportPNG(opts.csvFile);
+        exported = exportPNG(doc.artboards[abIndex].name);
     }
 
     var msg = "ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
             + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? "、ラフあり" : "、ラフなし") + "）\n"
             + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px\n"
             + "文字の大きさ：文字 " + round(CONFIG.text.size * textScale) + " pt ／ 数字 " + round(CONFIG.number.size * textScale) + " pt";
-    if (fitted) msg += "\n\nアートボードを表に合わせました：" + fitted.w + " × " + fitted.h + " px";
+    msg += "\n\nアートボード：" + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」" + (newArtboard ? "（新しく追加）" : "");
+    if (fitted) msg += "\nアートボードを表に合わせました：" + fitted.w + " × " + fitted.h + " px";
     if (exported) msg += "\n\nPNG を書き出しました：\n" + exported.fsName;
     if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
     if (missingImages.length) msg += "\n\n※見つからなかった画像：\n" + missingImages.join("\n");
@@ -450,7 +472,7 @@
 
     function findLayer(name) {
         try {
-            return doc.layers.getByName(name);
+            return layerRoot.layers.getByName(name);
         } catch (e) {
             return null;
         }
@@ -470,7 +492,7 @@
         if (layer && layer.pathItems.length) return layer.pathItems[0];
 
         if (!layer) {
-            layer = doc.layers.add();
+            layer = layerRoot.layers.add();
             layer.name = layerName;
             // 既存のレイヤーを隠さないように重なり順を整える（下地は一番下、ヘッダーはテーブルのすぐ下）
             if (layerName === CONFIG.layerNames.outer) {
@@ -711,11 +733,63 @@
         return { w: rect[2] - rect[0], h: rect[1] - rect[3] };
     }
 
+    // アートボードの上に何か（表など）があるか
+    function artboardIsEmpty(index) {
+        try {
+            doc.artboards.setActiveArtboardIndex(index);
+            doc.selection = null;
+            doc.selectObjectsOnActiveArtboard();
+            var empty = doc.selection.length === 0;
+            doc.selection = null;
+            return empty;
+        } catch (e) {
+            return true;
+        }
+    }
+
+    // 一番右のアートボードのさらに右に、新しいアートボードを追加して、その番号を返す
+    function addArtboard() {
+        var maxRight = -Infinity;
+        var top = doc.artboards[0].artboardRect[1];
+        for (var i = 0; i < doc.artboards.length; i++) {
+            maxRight = Math.max(maxRight, doc.artboards[i].artboardRect[2]);
+        }
+        var n = CONFIG.newArtboard;
+        var left = maxRight + n.gap;
+        doc.artboards.add([left, top, left + n.w, top - n.h]);
+        var index = doc.artboards.length - 1;
+        doc.artboards.setActiveArtboardIndex(index);
+        return index;
+    }
+
+    // 同じ名前があれば「名前 (2)」のように番号を付ける
+    function uniqueArtboardName(name, selfIndex) {
+        var used = {};
+        for (var i = 0; i < doc.artboards.length; i++) {
+            if (i !== selfIndex) used[doc.artboards[i].name] = true;
+        }
+        return uniqueName(name, used);
+    }
+
+    function uniqueLayerName(name) {
+        var used = {};
+        for (var i = 0; i < doc.layers.length; i++) used[doc.layers[i].name] = true;
+        return uniqueName(name, used);
+    }
+
+    function uniqueName(name, used) {
+        if (!used[name]) return name;
+        for (var k = 2; ; k++) {
+            if (!used[name + " (" + k + ")"]) return name + " (" + k + ")";
+        }
+    }
+
     // アクティブなアートボードを背景透過の PNG で書き出す
     // Illustrator ファイルが保存済みなら、同じ場所の「素材」フォルダへ自動で保存（フォルダがなければ作る）
     // 未保存のときやフォルダを作れないときは、保存先を選ぶ画面を出す
-    function exportPNG(csvFile) {
-        var defaultName = csvFile ? decodeURI(csvFile.name).replace(/\.csv$/i, "") + ".png" : "ステータス表.png";
+    function exportPNG(name) {
+        var defaultName = name.replace(/[\\\/:*?"<>|]/g, "_") + ".png";  // ファイル名に使えない文字は _ に
+        var csvFile = opts.csvFile;
         var dest = null;
         var folder = materialFolder(true);
         if (folder) {
