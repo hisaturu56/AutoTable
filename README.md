@@ -3,6 +3,19 @@
 Illustrator で、キャラクター用の基礎ステータス表を自動で作成するスクリプトです。
 動画（無限大ANANTA の解説動画など）で使う表を、文字と画像まで入れて PNG で書き出すところまで行います。
 
+## ダウンロード
+
+| ファイル | 内容 |
+| --- | --- |
+| [PolaroidTable.zxp](download/PolaroidTable.zxp) | **パネル本体**。ZXP UXP installer にドラッグ＆ドロップして入れる（おすすめ） |
+| [PolaroidTable_panel.zip](download/PolaroidTable_panel.zip) | ZXP が使えないとき用。展開して `install.bat` をダブルクリック |
+| [samples/](samples) | 試しに使える CSV（テスト用台本の 5 つの表など） |
+
+リンクを開いて、右上の「…」または「Download raw file」（↓のボタン）で保存します。
+全部まとめてほしいときは、このページの上の緑の「Code」→「Download ZIP」で、リポジトリ全体を zip でダウンロードできます。
+
+入れたら Illustrator を再起動して、「ウィンドウ」→「エクステンション」→「ポロライドテーブル自動作成」を開きます。
+
 ## パネル（おすすめ）
 
 Illustrator の「ウィンドウ」メニューから開いて、出しっぱなしにできるパネルです。上のタブ（表を作る・調整・書き出し）で 3 つの画面を切り替えます。設定はパネルの中に直接並んでいて、パネルを開いたまま Illustrator を操作できます。
@@ -127,7 +140,7 @@ C:\Program Files\Adobe\Adobe Illustrator（バージョン）\Presets\ja_JP\ス�
 
 ## CSV の形式
 
-`samples/基礎ステータス_サンプル.csv` を参照。UTF-8 で保存します（Excel の「CSV UTF-8」形式で OK）。
+`samples/基礎ステータス_サンプル.csv` を参照（ほかの例は `samples/テスト用台本/`）。UTF-8 で保存します（Excel の「CSV UTF-8」形式で OK）。
 
 ```
 images/無限大ロゴ.png,キャラクター,HP,攻撃力,防御力,エネルギー
@@ -198,17 +211,31 @@ images/タフィー.png,タフィー,9190,6838,5735,7132
 ## ファイル構成
 
 ```
-CLAUDE.md                             Claude 向けの作業メモ（決まっていること・注意点）
-scripts/ポロライドテーブル自動作成.jsx  表を作成するスクリプト
-scripts/キャラ画像の調整.jsx            キャラ画像の拡大率と位置をスライダーで調整するスクリプト
-panel/                                パネル本体（index.html：画面、host.jsx：Illustrator 側の処理）
-scripts/表の書き出し.jsx                アートボードを選んで PNG で書き出すスクリプト
-tools/build_panel.py                  パネルのインストール用ファイル（.zxp と zip）を作る
-tools/SignZxp.java                    .zxp に署名を付ける
-samples/基礎ステータス_サンプル.csv   CSV の例（数値はダミー）
-tables/                               Notion から作った表データ（CSV）
-docs/Notionから表データを作る手順.md  表の大きさの決め方と CSV の作り方
-docs/計画.md                          今後の開発計画
-docs/開発記録.md                      これまでの変更の記録
-docs/手作業の作成手順メモ.txt         スクリプト化する前の手作業の手順（元の仕様）
+download/                     ダウンロード用（ここから入れる）
+  PolaroidTable.zxp             パネル（ZXP UXP installer で入れる）
+  PolaroidTable_panel.zip       パネル（install.bat で入れる予備）
+
+samples/                      試しに使える CSV（数値などはすべて仮）
+  基礎ステータス_サンプル.csv     CSV の書き方の例
+  (例)タフィー解説_基礎ステータス.csv
+  テスト用台本/                  Notion のテスト用台本から作った 5 つの表
+
+tables/                       本番の表データ（Notion の台本から作った CSV）を置く場所（今は空）
+
+panel/                        パネルの中身（index.html：画面、host.jsx：Illustrator 側の処理）
+scripts/                      スクリプト（パネルを使わず、ファイル → スクリプト から実行するとき）
+  ポロライドテーブル自動作成.jsx   表を作る
+  キャラ画像の調整.jsx            キャラ画像の拡大率と位置を調整する
+  表の書き出し.jsx                アートボードを選んで PNG で書き出す
+
+docs/                         説明・記録
+  Notionから表データを作る手順.md  表の大きさの決め方と CSV の作り方
+  計画.md                        今後の開発計画
+  開発記録.md                    これまでの変更の記録
+  手作業の作成手順メモ.txt        スクリプト化する前の手作業の手順（元の仕様）
+
+tools/                        パネルのファイルを作る道具（開発用）
+  build_panel.py                download/ の .zxp と zip を作る
+  SignZxp.java                  .zxp に署名を付ける
+CLAUDE.md                     Claude 向けの作業メモ
 ```

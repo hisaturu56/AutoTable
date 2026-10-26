@@ -5,7 +5,7 @@ Illustrator 用の基礎ステータス表作成スクリプト（`scripts/ポ�
 ## 進め方
 - ユーザーとのやりとりは日本語。専門用語はかみくだいて説明する
 - スクリプトを変えたら README.md・docs/開発記録.md（必要なら docs/計画.md）も一緒に更新し、コミットして main に push する
-- **スクリプトを変えたら毎回、`python3 tools/build_panel.py` でパネルの `.zxp`（`dist/PolaroidTable.zxp`）を作り直して SendUserFile でユーザーに送り、入れ替え方（ダウンロード → ZXP UXP installer にドラッグ＆ドロップ → Illustrator 再起動）を説明する**（ユーザーの希望。ユーザーはパネルを ZXP UXP installer で管理する。zip と install.bat は予備）
+- **スクリプトを変えたら毎回、`python3 tools/build_panel.py` でパネルの `.zxp` を作り直し（`download/` にもコピーされるので一緒にコミットする）、 SendUserFile でユーザーに送り、入れ替え方（ダウンロード → ZXP UXP installer にドラッグ＆ドロップ → Illustrator 再起動）を説明する**（ユーザーの希望。ユーザーはパネルを ZXP UXP installer で管理する。zip と install.bat は予備）
 - `.jsx` は UTF-8（BOM 付き）のまま保つ（Windows 版 Illustrator で日本語が文字化けしないように）
 - 作業環境に Illustrator はないので、確認できるのは構文チェックまで。実機での確認はユーザーに依頼する
 
@@ -19,5 +19,5 @@ Illustrator 用の基礎ステータス表作成スクリプト（`scripts/ポ�
 - 文字の大きさは表全体でそろえる。7 行のマスの高さ（70.714 px）までは基準の大きさ、それより低いマスは比例して縮める。入りきらなければ表全体をまとめて縮める。作ったあとにパネルの「調整」タブで、表ごとにまとめて変えられる
 - ヘッダーの帯の文字は AE でアニメーションさせるので入れない
 - ラフ（サイズ 1 px 入力値・詳細 100・ギザギザ）は下地・ヘッダー・マスにかけ、文字と画像にはかけない
-- 表の中身と大きさ（何行 × 何列）は Notion の台本とキャラDB から Claude が判断して CSV を作る（docs/Notionから表データを作る手順.md）
+- 表の中身と大きさ（何行 × 何列）は Notion の台本とキャラDB から Claude が判断して CSV を作る（docs/Notionから表データを作る手順.md）。本番の CSV は `tables/`、テスト・例は `samples/`
 - Notion のステータスは未確定。数値は毎回 Notion から読み直す

@@ -3,6 +3,8 @@
 - dist/PolaroidTable.zxp        ZXP UXP installer などで入れる署名付きファイル（おすすめ）
 - dist/PolaroidTable_panel.zip  install.bat で入れる zip（ZXP が使えないとき用）
 
+できたファイルは download/ にもコピーする（GitHub からダウンロードできるように、download/ は git に入れる）
+
 .zxp の署名には自己署名の証明書（tools/zxp-cert.p12、なければ keytool で作る。git には入れない）を使う。
 署名は tools/SignZxp.java（Java 17 以降）で付ける。
 
@@ -23,6 +25,7 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
+DOWNLOAD = ROOT / "download"
 OUT = DIST / "PolaroidTable_panel.zip"
 ZXP = DIST / "PolaroidTable.zxp"
 STAGE = DIST / "PolaroidTable"
@@ -109,6 +112,10 @@ def main():
     stage()
     build_zip()
     build_zxp()
+    DOWNLOAD.mkdir(exist_ok=True)
+    for f in (ZXP, OUT):
+        shutil.copyfile(f, DOWNLOAD / f.name)
+    print(DOWNLOAD)
 
 
 if __name__ == "__main__":
