@@ -257,7 +257,7 @@
     msg += "\n\nアートボード：" + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」" + (newArtboard ? "（新しく追加）" : "");
     if (fitted) msg += "\nアートボードを表に合わせました：" + fitted.w + " × " + fitted.h + " px";
     if (exported) msg += "\n\nPNG を書き出しました：\n" + exported.fsName;
-    else if (opts.character) msg += "\n\nキャラ画像を「キャラ画像の調整」で調整し、「OKして書き出す」で PNG を書き出してください。";
+    else if (opts.character) msg += "\n\nキャラ画像を「キャラ画像の調整」で調整してから、パネルの「PNG で書き出す」で書き出してください。";
     if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
     if (missingImages.length) msg += "\n\n※見つからなかった画像：\n" + missingImages.join("\n");
     if (roughFailed) msg += "\n\n※ラフ効果を適用できませんでした。効果メニューから手動で適用してください。";
@@ -352,7 +352,7 @@
         var fitCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを表にぴったり合わせる（ラフのはみ出しも含む）");
         fitCheck.value = CONFIG.defaultFitArtboard;
         var exportCheck = optPanel.add("checkbox", undefined, "作成後すぐ、アートボードを PNG で書き出す（背景透過）");
-        optPanel.add("statictext", undefined, "※ キャラ欄がある表は、画像を調整してから「キャラ画像の調整」の「OKして書き出す」で書き出します");
+        optPanel.add("statictext", undefined, "※ キャラ欄がある表は、画像を調整してから、パネルの「PNG で書き出す」で書き出します");
         // キャラ欄がない表はすぐ書き出し、ある表は調整が終わってから書き出す（初期値。チェックで変えられる）
         exportCheck.value = !charCheck.value;
         charCheck.onClick = function () {

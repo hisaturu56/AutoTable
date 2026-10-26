@@ -4,13 +4,13 @@
  * ポロライドテーブル自動作成で入れたキャラ画像の、拡大率と位置をスライダーで調整する
  *
  * 使い方：Illustrator で ファイル → スクリプト → その他のスクリプト… からこのファイルを選択
- *   - 「キャラ画像」レイヤーの画像が一覧に出るので、調整したい画像を選ぶ
+ *   - アートボード（表）を選んでから、その表の「キャラ画像」レイヤーの画像を一覧から選ぶ
  *     （先にキャラ画像を選択しておくと、その画像が最初から選ばれた状態になる）
  *   - スライダーか数値で、拡大率・横・縦を変えると、その場で表に反映される
  *   - 「同じ表の画像を全部この画像と同じにする」で、同じ表のほかのキャラ画像にも同じ拡大率・位置を当てはめる
  *     （キャラごとに絵が違うので、そのあと 1 枚ずつ微調整する）
  *   - 「画像を差し替える…」で、選んでいる画像を別の画像に入れ替える（切り抜きの枠はそのまま）
- *   - OK で確定、「OKして書き出す」で確定して表を PNG で書き出す、キャンセルで開く前の状態に戻す
+ *   - OK で確定、キャンセルで開く前の状態に戻す（書き出しはパネルの「PNG で書き出す」で）
  *
  * 拡大率 100% ＝ マスにちょうど隙間なく入る大きさ
  * 横・縦 0 ＝ 画像の中心がマスの中心。横は右がプラス、縦は下がプラス（Illustrator の表示と同じ向き）
@@ -21,7 +21,7 @@
         imageLayerName: "キャラ画像",
         zoom: { min: 100, max: 400 },  // 拡大率スライダーの範囲（%）。100 より小さいとマスに隙間ができる
         moveRange: 1.5,                // 横・縦スライダーの範囲（マスの大きさの何倍まで動かせるか）
-        exportFolderName: "素材",       // PNG の保存先・画像を選ぶときに開くフォルダ（Illustrator ファイルと同じ場所）
+        exportFolderName: "素材",       // 差し替える画像を選ぶときに開くフォルダ（Illustrator ファイルと同じ場所）
         filter: "画像:*.png;*.jpg;*.jpeg;*.psd;*.tif;*.tiff;*.ai;*.eps;*.pdf;*.svg"
     };
 
@@ -38,22 +38,40 @@
         return;
     }
 
-    // 開く前の状態（キャンセルで戻す）
+    // 開く前の状態（キャンセルで戻す）と、画像が入っているアートボード
     var originals = [];
-    for (var i = 0; i < targets.length; i++) originals.push(saveState(targets[i]));
+    var boards = [];  // 画像があるアートボードの番号
+    for (var i = 0; i < targets.length; i++) {
+        originals.push(saveState(targets[i]));
+        targets[i].artboard = artboardIndexOf(targets[i]);
+        if (indexOf(boards, targets[i].artboard) < 0) boards.push(targets[i].artboard);
+    }
+    boards.sort(function (a, b) { return a - b; });
 
-    var current = 0;
-    var selected = selectedTarget();
-    if (selected >= 0) current = selected;
+    // 最初に選ぶ画像：選択中の画像 → 今のアートボードの最初の画像 → 一番最初の画像
+    var current = selectedTarget();
+    if (current < 0) {
+        var activeBoard = doc.artboards.getActiveArtboardIndex();
+        for (var a = 0; a < targets.length && current < 0; a++) {
+            if (targets[a].artboard === activeBoard) current = a;
+        }
+    }
+    if (current < 0) current = 0;
+    var shown = [];  // 画像の一覧に出している targets の番号
 
     // ---- ダイアログ ----
     var dlg = new Window("dialog", "キャラ画像の調整");
     dlg.alignChildren = "fill";
 
+    var boardGroup = dlg.add("group");
+    boardGroup.add("statictext", undefined, "アートボード：").preferredSize.width = 80;
+    var boardList = boardGroup.add("dropdownlist");
+    for (var b = 0; b < boards.length; b++) boardList.add("item", (boards[b] + 1) + "：" + doc.artboards[boards[b]].name);
+    boardList.preferredSize.width = 360;
+
     var pickGroup = dlg.add("group");
-    pickGroup.add("statictext", undefined, "画像：");
+    pickGroup.add("statictext", undefined, "画像：").preferredSize.width = 80;
     var list = pickGroup.add("dropdownlist");
-    for (var t = 0; t < targets.length; t++) list.add("item", targets[t].label);
     list.preferredSize.width = 360;
 
     var panel = dlg.add("panel", undefined, "拡大率と位置");
@@ -72,14 +90,16 @@
 
     var btns = dlg.add("group");
     btns.alignment = "right";
-    var exportBtn = btns.add("button", undefined, "OKして書き出す");
     btns.add("button", undefined, "OK", { name: "ok" });
     btns.add("button", undefined, "キャンセル", { name: "cancel" });
-    exportBtn.onClick = function () { dlg.close(2); };
 
+    boardList.onChange = function () {
+        if (!boardList.selection) return;
+        fillImages(boards[boardList.selection.index]);
+    };
     list.onChange = function () {
         if (!list.selection) return;
-        current = list.selection.index;
+        current = shown[list.selection.index];
         selectOnly(targets[current]);
         refresh();
     };
@@ -135,8 +155,7 @@
         // 名前を「行番号_ファイル名」に変える（例：行2_リンゴ）
         var rowPart = tg.group.name.replace(/_.*$/, "");
         tg.group.name = rowPart + "_" + decodeURI(f.name).replace(/\.[^.]+$/, "");
-        tg.label = (tg.parentName ? tg.parentName + " ／ " : "") + tg.group.name;
-        list.items[current].text = tg.label;
+        setListText(tg, tg.group.name);
         refresh();
     };
     revertBtn.onClick = function () {
@@ -144,20 +163,40 @@
         refresh();
     };
 
-    list.selection = current;
-    selectOnly(targets[current]);
-    refresh();
+    boardList.selection = indexOf(boards, targets[current].artboard);
+    fillImages(targets[current].artboard);
 
-    var result = dlg.show();
-    if (result === 2) {
-        var exported = exportPNG(targets[current]);
-        if (exported) alert("PNG を書き出しました：\n" + exported.fsName);
-    } else if (result !== 1) {
+    if (dlg.show() !== 1) {
         for (var k = 0; k < targets.length; k++) restoreState(targets[k], originals[k]);
         app.redraw();
     }
 
     // ================================================================
+
+    // アートボードの画像だけを一覧に出す。今の画像がそのアートボードになければ最初の画像を選ぶ
+    function fillImages(board) {
+        list.removeAll();
+        shown = [];
+        for (var i = 0; i < targets.length; i++) {
+            if (targets[i].artboard !== board) continue;
+            shown.push(i);
+            list.add("item", targets[i].group.name);
+        }
+        var pos = indexOf(shown, current);
+        list.selection = pos >= 0 ? pos : 0;
+        list.onChange();  // 画像の選択と値の表示を変える（選択を変えただけでは呼ばれないことがあるため）
+    }
+
+    function setListText(tg, text) {
+        for (var i = 0; i < shown.length; i++) {
+            if (targets[shown[i]] === tg) list.items[i].text = text;
+        }
+    }
+
+    function indexOf(array, value) {
+        for (var i = 0; i < array.length; i++) if (array[i] === value) return i;
+        return -1;
+    }
 
     // 「キャラ画像」レイヤー（どの階層でも）の中の、切り抜きグループを集める
     function collectTargets(layers, parentName) {
@@ -171,9 +210,7 @@
                         group: group,
                         image: group.placedItems[0],
                         clip: group.pathItems[0],
-                        layer: layer,
-                        parentName: parentName,
-                        label: (parentName ? parentName + " ／ " : "") + group.name
+                        layer: layer
                     });
                 }
             }
@@ -242,7 +279,7 @@
     function saveState(tg) {
         var file = null;
         try { file = tg.image.file; } catch (e) {}
-        return { w: tg.image.width, h: tg.image.height, pos: tg.image.position, file: file, name: tg.group.name, label: tg.label };
+        return { w: tg.image.width, h: tg.image.height, pos: tg.image.position, file: file, name: tg.group.name };
     }
 
     function restoreState(tg, st) {
@@ -253,10 +290,7 @@
         }
         if (tg.group.name !== st.name) {
             tg.group.name = st.name;
-            tg.label = st.label;
-            for (var i = 0; i < targets.length; i++) {
-                if (targets[i] === tg) list.items[i].text = st.label;
-            }
+            setListText(tg, st.name);
         }
         tg.image.width = st.w;
         tg.image.height = st.h;
@@ -300,35 +334,6 @@
             if (cb.cx >= r[0] && cb.cx <= r[2] && cb.cy <= r[1] && cb.cy >= r[3]) return i;
         }
         return doc.artboards.getActiveArtboardIndex();
-    }
-
-    // 表のアートボードを背景透過の PNG で書き出す（ポロライドテーブル自動作成と同じ保存先・ファイル名）
-    function exportPNG(tg) {
-        var index = artboardIndexOf(tg);
-        var name = doc.artboards[index].name.replace(/[\\\/:*?"<>|]/g, "_") + ".png";
-        var dest = null;
-        var folder = materialFolder(true);
-        if (folder) {
-            dest = new File(folder.fsName + "/" + name);
-            if (dest.exists && !confirm("「" + CONFIG.exportFolderName + "」フォルダに同じ名前の PNG があります。上書きしますか？\n"
-                    + dest.fsName + "\n\n「いいえ」を選ぶと、保存先を選ぶ画面を出します。")) {
-                dest = dest.saveDlg("PNG の保存先", "*.png");
-            }
-        } else {
-            dest = new File(name).saveDlg("PNG の保存先", "*.png");
-        }
-        if (!dest) return null;
-
-        doc.selection = null;  // 選択の枠が写らないように
-        doc.artboards.setActiveArtboardIndex(index);
-        var o = new ExportOptionsPNG24();
-        o.antiAliasing = true;
-        o.transparency = true;
-        o.artBoardClipping = true;
-        o.horizontalScale = 100;
-        o.verticalScale = 100;
-        doc.exportFile(dest, ExportType.PNG24, o);
-        return dest;
     }
 
     // スライダーと数値入力の 1 行
