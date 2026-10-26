@@ -512,6 +512,7 @@
 
     function makeCell(name, top, left, w, h) {
         var g = tableLayer.groupItems.add();
+        g.move(tableLayer, ElementPlacement.PLACEATEND);  // レイヤーパネルで 行1 → 行2 … と上から並ぶように、作った順に下へ足す
         g.name = name;
         var radius = CONFIG.cornerRadius;
         var p = radius > 0 ? g.pathItems.roundedRectangle(top, left, w, h, radius, radius)
@@ -618,6 +619,7 @@
     // ロゴ（fitInside）：切り抜かずに、余白を空けてマスの中に収める
     function placeImage(container, name, file, top, left, w, h, fitInside) {
         var g = container.groupItems.add();
+        g.move(container, ElementPlacement.PLACEATEND);  // 行1 が一番上に並ぶように
         g.name = name;
         var img = g.placedItems.add();
         img.file = file;
