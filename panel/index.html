@@ -85,6 +85,8 @@
       <legend>オプション</legend>
       <label class="c"><input type="checkbox" id="rough">ラフ効果をかける</label>
       <label class="c"><input type="checkbox" id="fitArtboard">アートボードを表にぴったり合わせる</label>
+      <label class="c"><input type="checkbox" id="overwrite">今のアートボードの表を作り直す（上書き）</label>
+      <div class="note">作り直す表をクリックしてから押してください。位置はそのままで、ほかの設定で作り直します</div>
       <div class="note">PNG の書き出しは「書き出し」タブで行います</div>
     </fieldset>
 
@@ -255,12 +257,16 @@
       rows: $("rows").value, cols: $("cols").value,
       character: $("character").checked,
       x: $("x").value, y: $("y").value, w: w, h: h,
-      rough: $("rough").checked, fitArtboard: $("fitArtboard").checked
+      rough: $("rough").checked, fitArtboard: $("fitArtboard").checked,
+      overwrite: $("overwrite").checked
     };
     busy(true, "表を作っています…");
     call("PT.createTable(" + arg(folder + "/jsx/create_table.jsx") + ", " + arg(options) + ")", function (res) {
       busy(false);
-      if (res && res.message) setStatus(res.message);
+      if (res && res.message) {
+        setStatus(res.message);
+        $("overwrite").checked = false;  // うっかり続けて上書きしないように、作り終わったら外す
+      }
     });
   });
 

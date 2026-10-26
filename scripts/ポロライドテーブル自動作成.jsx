@@ -128,6 +128,25 @@
     // アートボード名・レイヤー名・PNG のファイル名に使う
     var tableName = opts.csvFile ? decodeURI(opts.csvFile.name).replace(/\.csv$/i, "") : "";
 
+    // 作り直し：今のアートボードの表を消して、同じ位置（下地の中心）に作り直す
+    var replaced = false;
+    if (opts.overwrite) {
+        var old = findTableOnArtboard(abIndex);
+        if (!old) {
+            alert("アートボード " + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」に、作り直す表が見つかりません。\n"
+                + "作り直したい表をクリックして、そのアートボードを選んでから実行してください。");
+            return;
+        }
+        if (!confirm("アートボード " + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」の表を消して、作り直します。\n"
+                + "（調整したキャラ画像や文字の大きさも元に戻ります）\n\nよろしいですか？")) {
+            return;
+        }
+        var ob = old.outer.geometricBounds;
+        opts.layout.x = (ob[0] + ob[2]) / 2 - ab[0];
+        opts.layout.y = ab[1] - (ob[1] + ob[3]) / 2;
+        replaced = true;  // 前の表は、キャラ画像を選び終わってから消す（途中でキャンセルしても消えないように）
+    }
+
     var textFont   = findFont(CONFIG.text.family, CONFIG.text.style);
     var numberFont = findFont(CONFIG.number.family, CONFIG.number.style);
     var missingFonts = [];
@@ -143,6 +162,12 @@
         if (!images) return;
     }
 
+    if (replaced) {
+        old.layer.locked = false;
+        old.layer.visible = true;
+        old.layer.remove();
+    }
+
     // ---- 下地・ヘッダー・テーブル ----
     // 「テーブル」レイヤー（一番上の階層）に長方形があれば、それをマス目に加工する（手で用意した下地・ヘッダーも使う）
     // それ以外は、表ごとに「表の名前」のレイヤーを作り、その中に 下地・ヘッダー・テーブル を作る（作ったものにはラフをかける）
@@ -154,7 +179,7 @@
     if (!templateRect) {
         tableLayer = null;
         // 今のアートボードにもう何かあれば（1 つ目の表など）、新しいアートボードを右に追加する
-        if (!artboardIsEmpty(abIndex)) {
+        if (!replaced && !artboardIsEmpty(abIndex)) {
             abIndex = addArtboard();
             ab = doc.artboards[abIndex].artboardRect;
             newArtboard = true;
@@ -253,6 +278,7 @@
             + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px\n"
             + "文字の大きさ：文字 " + round(CONFIG.text.size * textScale) + " pt ／ 数字 " + round(CONFIG.number.size * textScale) + " pt";
     msg += "\n\nアートボード：" + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」" + (newArtboard ? "（新しく追加）" : "");
+    if (replaced) msg += "（前の表を消して作り直しました）";
     if (fitted) msg += "\nアートボードを表に合わせました：" + fitted.w + " × " + fitted.h + " px";
     msg += "\n\n" + (opts.character ? "キャラ画像を調整してから、" : "") + "パネルの「書き出し」で PNG を書き出してください。";
     if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
@@ -349,6 +375,8 @@
         roughCheck.value = CONFIG.rough.enabled;
         var fitCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを表にぴったり合わせる（ラフのはみ出しも含む）");
         fitCheck.value = CONFIG.defaultFitArtboard;
+        var overwriteCheck = optPanel.add("checkbox", undefined, "今のアートボードの表を作り直す（上書き。位置はそのまま）");
+        overwriteCheck.value = false;
         optPanel.add("statictext", undefined, "※ PNG の書き出しは、パネルの「書き出し」（または 表の書き出し.jsx）で行います");
 
         var btns = dlg.add("group");
@@ -410,7 +438,8 @@
             cols: cols,
             character: charCheck.value,
             rough: roughCheck.value,
-            fitArtboard: fitCheck.value
+            fitArtboard: fitCheck.value,
+            overwrite: overwriteCheck.value
         };
     }
 
@@ -443,7 +472,8 @@
             cols: cols,
             character: !!p.character,
             rough: !!p.rough,
-            fitArtboard: !!p.fitArtboard
+            fitArtboard: !!p.fitArtboard,
+            overwrite: !!p.overwrite
         };
     }
 
@@ -837,6 +867,25 @@
         var rect = [Math.floor(vb[0] - pad), Math.ceil(vb[1] + pad), Math.ceil(vb[2] + pad), Math.floor(vb[3] - pad)];
         doc.artboards[abIndex].artboardRect = rect;
         return { w: rect[2] - rect[0], h: rect[1] - rect[3] };
+    }
+
+    // アートボードの上にある表（「下地」レイヤーを持つ表のレイヤー）を探す
+    function findTableOnArtboard(index) {
+        var r = doc.artboards[index].artboardRect;
+        for (var i = 0; i < doc.layers.length; i++) {
+            var outer = null;
+            try {
+                var sub = doc.layers[i].layers.getByName(CONFIG.layerNames.outer);
+                if (sub.pathItems.length) outer = sub.pathItems[0];
+            } catch (e) {
+                outer = null;
+            }
+            if (!outer) continue;
+            var b = outer.geometricBounds;
+            var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+            if (cx >= r[0] && cx <= r[2] && cy <= r[1] && cy >= r[3]) return { layer: doc.layers[i], outer: outer };
+        }
+        return null;
     }
 
     // アートボードの上に何か（表など）があるか
