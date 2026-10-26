@@ -81,7 +81,6 @@
         newArtboard: { w: 1920, h: 1080, gap: 100 },
 
         defaultFitArtboard: true,      // ダイアログの初期値：アートボードを表にぴったり合わせる
-        defaultExport: true,           // ダイアログの初期値：PNG で書き出す
         exportFolderName: "素材"        // Illustrator ファイルと同じ場所にあるこの名前のフォルダ。キャラ画像をここから探し、PNG もここへ保存（なければ作る）
     };
 
@@ -244,6 +243,7 @@
     msg += "\n\nアートボード：" + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」" + (newArtboard ? "（新しく追加）" : "");
     if (fitted) msg += "\nアートボードを表に合わせました：" + fitted.w + " × " + fitted.h + " px";
     if (exported) msg += "\n\nPNG を書き出しました：\n" + exported.fsName;
+    else if (opts.character) msg += "\n\nキャラ画像を「キャラ画像の調整」で調整し、「OKして書き出す」で PNG を書き出してください。";
     if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
     if (missingImages.length) msg += "\n\n※見つからなかった画像：\n" + missingImages.join("\n");
     if (roughFailed) msg += "\n\n※ラフ効果を適用できませんでした。効果メニューから手動で適用してください。";
@@ -310,8 +310,13 @@
         roughCheck.value = CONFIG.rough.enabled;
         var fitCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを表にぴったり合わせる（ラフのはみ出しも含む）");
         fitCheck.value = CONFIG.defaultFitArtboard;
-        var exportCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを PNG で書き出す（背景透過）");
-        exportCheck.value = CONFIG.defaultExport;
+        var exportCheck = optPanel.add("checkbox", undefined, "作成後すぐ、アートボードを PNG で書き出す（背景透過）");
+        optPanel.add("statictext", undefined, "※ キャラ欄がある表は、画像を調整してから「キャラ画像の調整」の「OKして書き出す」で書き出します");
+        // キャラ欄がない表はすぐ書き出し、ある表は調整が終わってから書き出す（初期値。チェックで変えられる）
+        exportCheck.value = !charCheck.value;
+        charCheck.onClick = function () {
+            if (!csvFile) exportCheck.value = !charCheck.value;
+        };
 
         var btns = dlg.add("group");
         btns.alignment = "right";
@@ -325,12 +330,15 @@
                 csvFile = f;
                 csvLabel.text = decodeURI(f.name);
                 sizePanel.enabled = false;
+                var rowsData = readCSV(f);
+                if (rowsData) exportCheck.value = !hasImageColumn(rowsData);
             }
         };
         clearBtn.onClick = function () {
             csvFile = null;
             csvLabel.text = "（CSV を選ばないと空の表を作ります）";
             sizePanel.enabled = true;
+            exportCheck.value = !charCheck.value;
         };
 
         if (dlg.show() !== 1) return null;
