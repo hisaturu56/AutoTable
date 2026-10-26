@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.hisaturu.polaroidtable" ExtensionBundleVersion="1.0.0"
+                   ExtensionBundleName="PolaroidTable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ExtensionList>
+    <Extension Id="com.hisaturu.polaroidtable.panel" Version="1.0.0"/>
+  </ExtensionList>
+  <ExecutionEnvironment>
+    <HostList>
+      <!-- Illustrator CC 2018（22.0）以降 -->
+      <Host Name="ILST" Version="[22.0,99.9]"/>
+    </HostList>
+    <LocaleList>
+      <Locale Code="All"/>
+    </LocaleList>
+    <RequiredRuntimeList>
+      <RequiredRuntime Name="CSXS" Version="9.0"/>
+    </RequiredRuntimeList>
+  </ExecutionEnvironment>
+  <DispatchInfoList>
+    <Extension Id="com.hisaturu.polaroidtable.panel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./index.html</MainPath>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>ポロライドテーブル自動作成</Menu>
+          <Geometry>
+            <Size>
+              <Height>200</Height>
+              <Width>240</Width>
+            </Size>
+            <MinSize>
+              <Height>120</Height>
+              <Width>160</Width>
+            </MinSize>
+          </Geometry>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>
