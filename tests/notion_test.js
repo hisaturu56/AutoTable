@@ -54,7 +54,7 @@ const rowsOf = (name, order, image, ...cells) => ({
     assert.deepStrictEqual(M.sortByDate(scripts, today).map((s) => s.id), ["b", "c", "d", "a"]);
   });
 
-  await test("表リストを表ごとにまとめる（行の番号順・使っている列まで・画像の列）", () => {
+  await test("テーブルリストを表ごとにまとめる（行の番号順・使っている列まで・画像の列）", () => {
     const t = N.groupTables([
       rowsOf("1_基礎ステータス比較", 2, "タフィー.png", "タフィー", "15552"),
       rowsOf("1_基礎ステータス比較", 1, "無限大ロゴ.png", "キャラクター", "HP"),
@@ -86,22 +86,22 @@ const rowsOf = (name, order, image, ...cells) => ({
     const list = await N.listScripts("tok");
     assert.deepStrictEqual(list, [{ id: "x", title: "台本A", date: "2026-10-01" }, { id: "y", title: "台本B", date: null }]);
   });
-  await test("台本ページの中（トグルの中）の表リストを読む", async () => {
+  await test("台本ページの中（トグルの中）のテーブルリストを読む", async () => {
     N.setTransport(fake((m, p) => {
       if (p.indexOf("/v1/blocks/" + page + "/children") === 0) return { status: 200, json: { results: [
         { id: "t1", type: "paragraph", has_children: false },
         { id: "tg", type: "toggle", has_children: true },
         { id: "other", type: "child_database", child_database: { title: "テロップリスト" } }], has_more: false } };
       if (p.indexOf("/v1/blocks/tg/children") === 0) return { status: 200, json: { results: [
-        { id: db, type: "child_database", child_database: { title: "ポロライドテーブル_表リスト" } }], has_more: false } };
+        { id: db, type: "child_database", child_database: { title: "テーブルリスト" } }], has_more: false } };
       if (p.indexOf("/v1/databases/" + db + "/query") === 0) return { status: 200, json: { results: [rowsOf("1_表", 1, "", "a", "b")], has_more: false } };
       throw new Error("想定外：" + p);
     }));
     const r = await N.readTables(page, "tok");
-    assert.strictEqual(r.db.name, "ポロライドテーブル_表リスト");
+    assert.strictEqual(r.db.name, "テーブルリスト");
     assert.deepStrictEqual(r.tables[0].rows, [["a", "b"]]);
   });
-  await test("表リストがない台本", async () => {
+  await test("テーブルリストがない台本", async () => {
     N.setTransport(fake(() => ({ status: 200, json: { results: [{ id: "p", type: "paragraph", has_children: false }], has_more: false } })));
     const r = await N.readTables(page, "tok");
     assert.strictEqual(r.db, null);

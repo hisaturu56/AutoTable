@@ -1,17 +1,17 @@
 /*
  * notion.js（パネル用）
- * Notion の API で、台本DB の台本の一覧と、台本ページの中の「ポロライドテーブル_表リスト」を読む
+ * Notion の API で、台本DB の台本の一覧と、台本ページの中の「テーブルリスト」を読む
  *
  * - 通信は Node の https で行う（パネルの画面からの通信は Notion に断られるため。manifest で Node を使えるようにしてある）
  * - Notion のエラーは、わかりやすい日本語にして返す
  *
- * 表リストの形（Claude が台本から作って置く）
+ * テーブルリストの形（Claude が台本から作って置く）
  *   表：タイトル（表の名前。同じ名前の行が 1 つの表）／行：数値（並び順。1 ＝ 項目名の行）
  *   画像：テキスト（キャラ欄の画像のファイル名）／列1〜列8：テキスト（マスの文字）
  */
 (function (root) {
   var SCRIPT_DB = "22c89356515d8067a5eccc96060268da";  // 台本DB
-  var TABLE_DB_NAME = "表リスト";                       // 台本ページの中の、名前にこれを含むデータベースを読む
+  var TABLE_DB_NAME = "テーブルリスト";                       // 台本ページの中の、名前にこれを含むデータベースを読む
   var NOTION_VERSION = "2022-06-28";
   var MAX_COLUMNS = 8;
   var CONNECTION = "レターボックス_自動テロップ";        // 台本DB につないであるコネクションの名前（案内用）
@@ -146,11 +146,11 @@
     });
   }
 
-  // ---- 7. 台本ページの中の表リストを読む ----
+  // ---- 7. 台本ページの中のテーブルリストを読む ----
 
   var NESTED = { toggle: 1, heading_1: 1, heading_2: 1, heading_3: 1, column_list: 1, column: 1, callout: 1, quote: 1 };
 
-  // 名前に「表リスト」を含むデータベースを探す（トグルや段組みの中も 2 段まで）
+  // 名前に「テーブルリスト」を含むデータベースを探す（トグルや段組みの中も 2 段まで）
   function findTableDb(pageId, token) {
     var calls = 0;
     function search(blockId, depth) {
@@ -173,7 +173,7 @@
     return search(pageId, 0);
   }
 
-  // 表リストの行を、表ごとにまとめる
+  // テーブルリストの行を、表ごとにまとめる
   //   戻り値：[{ name, hasImages, rows: [[画像?, 列1, 列2, …]] }]（表は最初に出てきた順、行は「行」の番号順）
   function groupTables(pages) {
     var tables = [], byName = {};
