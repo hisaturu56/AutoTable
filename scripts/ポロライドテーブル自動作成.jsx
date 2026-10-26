@@ -1,6 +1,6 @@
 ﻿#target illustrator
 /*
- * ステータス表作成.jsx
+ * ポロライドテーブル自動作成.jsx
  * キャラクター用の基礎ステータス表を自動で作成する
  *
  * 使い方：Illustrator で ファイル → スクリプト → その他のスクリプト… からこのファイルを選択
@@ -217,7 +217,7 @@
     // ================================================================
 
     function showDialog() {
-        var dlg = new Window("dialog", "ステータス表作成");
+        var dlg = new Window("dialog", "ポロライドテーブル自動作成");
         dlg.alignChildren = "fill";
 
         var dataPanel = dlg.add("panel", undefined, "データ");

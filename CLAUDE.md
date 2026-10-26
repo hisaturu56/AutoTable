@@ -1,6 +1,6 @@
-# PolaroidTable 作業メモ
+# ポロライドテーブル自動作成（PolaroidTable） 作業メモ
 
-Illustrator 用の基礎ステータス表作成スクリプト（`scripts/ステータス表作成.jsx`）。仕様は README.md、経緯は docs/開発記録.md を参照。
+Illustrator 用の基礎ステータス表作成スクリプト（`scripts/ポロライドテーブル自動作成.jsx`）。仕様は README.md、経緯は docs/開発記録.md を参照。
 
 ## 進め方
 - ユーザーとのやりとりは日本語。専門用語はかみくだいて説明する
