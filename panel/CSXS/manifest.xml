@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="7.0" ExtensionBundleId="com.hisaturu.polaroidtable" ExtensionBundleVersion="1.0.0"
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.hisaturu.polaroidtable" ExtensionBundleVersion="1.1.0"
                    ExtensionBundleName="PolaroidTable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
-    <Extension Id="com.hisaturu.polaroidtable.panel" Version="1.0.0"/>
+    <Extension Id="com.hisaturu.polaroidtable.panel" Version="1.1.0"/>
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
@@ -30,13 +30,18 @@
           <Menu>ポロライドテーブル自動作成</Menu>
           <Geometry>
             <Size>
-              <Height>560</Height>
+              <Height>820</Height>
               <Width>320</Width>
             </Size>
             <MinSize>
               <Height>200</Height>
               <Width>240</Width>
             </MinSize>
+            <!-- 最大の大きさを決めておくと、パネルを伸ばしたときに中身も一緒に広がる -->
+            <MaxSize>
+              <Height>4000</Height>
+              <Width>2000</Width>
+            </MaxSize>
           </Geometry>
         </UI>
       </DispatchInfo>

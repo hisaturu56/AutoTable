@@ -35,6 +35,11 @@
   .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #status { min-height: 1.5em; white-space: pre-wrap; word-break: break-all; }
   #boards label.c { word-break: break-all; }
+  html, body { height: 100%; }
+  /* スクロールバーを Illustrator の見た目に合わせる */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
 </style>
 </head>
 <body>
