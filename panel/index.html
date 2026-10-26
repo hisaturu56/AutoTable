@@ -30,7 +30,8 @@
   button:disabled { opacity: 0.5; cursor: default; }
   button.wide { display: block; width: 100%; }
   button.main { padding: 9px; font-size: 13px; background: var(--accent); border-color: var(--accent); color: #fff; }
-  .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 4px; margin: 0 0 4px 82px; }
+  /* 割合のボタン：2 つずつ 3 行（100%・50% ／ 3分の2・3分の1 ／ 4分の3・4分の1） */
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 4px; margin: 0 0 6px 82px; }
   .presets button { margin: 0; padding: 2px 0; font-size: 11px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6px; }
   .note { color: var(--note); font-size: 11px; line-height: 1.5; }
@@ -115,9 +116,9 @@
         <label>高さ</label><input type="number" id="h" step="any">
       </div>
       <div class="row"><label class="k">幅の割合 %</label><input type="range" id="wpR" min="10" max="100" step="1"><input type="number" id="wp" min="10" max="100" step="any"></div>
-      <div class="presets" data-for="wp"><button data-v="100">100%</button><button data-v="66.667">3分の2</button><button data-v="50">半分</button><button data-v="33.333">3分の1</button></div>
+      <div class="presets" data-for="wp"><button data-v="100">100%</button><button data-v="50">50%</button><button data-v="66.667">3分の2</button><button data-v="33.333">3分の1</button><button data-v="75">4分の3</button><button data-v="25">4分の1</button></div>
       <div class="row"><label class="k">高さの割合 %</label><input type="range" id="hpR" min="10" max="100" step="1"><input type="number" id="hp" min="10" max="100" step="any"></div>
-      <div class="presets" data-for="hp"><button data-v="100">100%</button><button data-v="66.667">3分の2</button><button data-v="50">半分</button><button data-v="33.333">3分の1</button></div>
+      <div class="presets" data-for="hp"><button data-v="100">100%</button><button data-v="50">50%</button><button data-v="66.667">3分の2</button><button data-v="33.333">3分の1</button><button data-v="75">4分の3</button><button data-v="25">4分の1</button></div>
       <div class="row"><span id="sizeNote" class="note"></span></div>
       <button id="layoutReset">初期値に戻す</button>
     </fieldset>
@@ -129,7 +130,7 @@
       <label class="c"><input type="checkbox" id="createRaster">画像にする（土台をくっつけて 1 枚に。いちばん軽い）</label>
       <label class="c"><input type="checkbox" id="overwrite">同じ名前の表があれば作り直す（上書き）</label>
       <div class="note">同じ名前（Notion は「台本タイトル_表の名前」、CSV はファイル名）のアートボードの表を消して、同じ位置に作り直します（空の表のときは、今のアートボードの表）</div>
-      <div class="note">ラフ・画像にするは、表を作ったすぐあとに仕上げとしてかけます（キャラ画像と文字は画像にしないので、あとから直せます）。やり直すときは「調整」タブの「仕上げ」で</div>
+      <div class="note">ラフ・画像にするは、表を作ったすぐあとに仕上げとしてかけます（キャラ画像と文字は画像にしないので、あとから直せます）。やり直すときは「作り直し（上書き）」で作り直してください</div>
     </fieldset>
 
     <button id="createBtn" class="wide main">表を作る</button>
@@ -148,13 +149,6 @@
     </fieldset>
 
     <button id="imgBulk" class="wide">キャラ画像をまとめて入れる・変える…</button>
-    <fieldset>
-      <legend>仕上げ（チェックした表の下地・ヘッダー・マス）</legend>
-      <label class="c"><input type="checkbox" id="finRough">ラフをかける</label>
-      <label class="c"><input type="checkbox" id="finRaster">画像にする（土台をくっつけて 1 枚に。いちばん軽い）</label>
-      <button id="finishBtn" class="wide main">仕上げる</button>
-      <div class="note">キャラ画像と文字はそのまま（あとから直せます）。画像にした見た目は書き出す PNG と同じ。もう一度押すと、前の画像を消して作り直します。マスの形・色を変えるときは、作り直し（上書き）で</div>
-    </fieldset>
 
     <fieldset>
       <legend>文字の大きさ（チェックした表の文字すべて）</legend>
@@ -291,7 +285,7 @@
     $(k).addEventListener("input", saveForm);
     $(k).addEventListener("change", saveForm);
   });
-  // 割合のスライダーと数値を連動させる。ボタンは 100%・3分の2・半分・3分の1
+  // 割合のスライダーと数値を連動させる。ボタンは 100%・50%・3分の2・3分の1・4分の3・4分の1
   ["wp", "hp"].forEach(function (k) {
     $(k + "R").addEventListener("input", function () { $(k).value = this.value; updateSize(); saveForm(); });
     $(k).addEventListener("input", function () { var v = parseFloat(this.value); if (!isNaN(v)) $(k + "R").value = v; });
@@ -663,34 +657,6 @@
       each(boards[i], function (r) { results.push(r); next(i + 1); });
     })(0);
   }
-
-  // ---- 仕上げ（ラフをかける・画像にする。チェックで選ぶ） ----
-  var finish = load("finish", { rough: true, raster: true });
-  $("finRough").checked = !!finish.rough;
-  $("finRaster").checked = !!finish.raster;
-  ["finRough", "finRaster"].forEach(function (id) {
-    $(id).addEventListener("change", function () { save("finish", { rough: $("finRough").checked, raster: $("finRaster").checked }); });
-  });
-
-  $("finishBtn").addEventListener("click", function () {
-    var rough = $("finRough").checked, raster = $("finRaster").checked;
-    if (!rough && !raster) { setStatus("「ラフをかける」か「画像にする」にチェックを入れてください。"); return; }
-    busy(true, "仕上げています…");
-    eachBoard(function (board, done) {
-      setStatus("仕上げています…（" + (board + 1) + "：" + boardName(board) + "）");
-      call("PT.finishTable(" + board + ", " + rough + ", " + raster + ")", done);
-    }, function (results, boards) {
-      busy(false);
-      var done = 0, none = [];
-      results.forEach(function (r, i) {
-        if (r && r.done) done++;
-        else none.push(boardName(boards[i]));
-      });
-      var what = rough && raster ? "ラフをかけて画像にしました" : rough ? "ラフをかけました（固定）" : "画像にしました";
-      setStatus(done + " 個の表に" + what + "。" + (none.length ? "\n⚠ 表が見つからなかったアートボード：" + none.join("、") : ""));
-      loadText();
-    });
-  });
 
   function boardName(board) {
     for (var i = 0; i < imageData.boards.length; i++) if (imageData.boards[i].index === board) return imageData.boards[i].name;
