@@ -25,6 +25,13 @@
         headerHeight: 30,
         margin: 7.5,                   // 下地のフチからヘッダー・テーブルまでの余白、ヘッダーとテーブルの間
         gap: 7.5,                      // マス同士の間隔
+        // 幅・高さの割合（ダイアログのプルダウン）。入力した幅・高さにこの割合をかけた大きさで作る
+        ratios: [
+            { label: "1（そのまま）", value: 1 },
+            { label: "3分の2", value: 2 / 3 },
+            { label: "2分の1", value: 1 / 2 },
+            { label: "3分の1", value: 1 / 3 }
+        ],
         settingsFile: Folder.userData + "/PolaroidTable_layout.txt",  // 前回入力した値を覚えておくファイル
 
         // このレイヤーがドキュメントにあれば、その長方形を使う（「テーブル」の長方形をマス目に加工する）
@@ -238,6 +245,7 @@
 
     var msg = "ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
             + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? "、ラフあり" : "、ラフなし") + "）\n"
+            + "表全体：" + round(opts.layout.w) + " × " + round(opts.layout.h) + " px\n"
             + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px\n"
             + "文字の大きさ：文字 " + round(CONFIG.text.size * textScale) + " pt ／ 数字 " + round(CONFIG.number.size * textScale) + " pt";
     msg += "\n\nアートボード：" + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」" + (newArtboard ? "（新しく追加）" : "");
@@ -295,6 +303,30 @@
         g5.add("statictext", undefined, "高さ：");
         var hInput = g5.add("edittext", undefined, String(saved.h));
         hInput.characters = 7;
+        var g6 = layoutPanel.add("group");
+        g6.add("statictext", undefined, "幅の割合：");
+        var wRatioList = g6.add("dropdownlist");
+        g6.add("statictext", undefined, "高さの割合：");
+        var hRatioList = g6.add("dropdownlist");
+        for (var ri = 0; ri < CONFIG.ratios.length; ri++) {
+            wRatioList.add("item", CONFIG.ratios[ri].label);
+            hRatioList.add("item", CONFIG.ratios[ri].label);
+        }
+        wRatioList.selection = saved.wr;
+        hRatioList.selection = saved.hr;
+        var sizeLabel = layoutPanel.add("statictext", undefined, "");
+        sizeLabel.characters = 40;
+        var updateSize = function () {
+            var w = parseFloat(wInput.text) * ratioValue(wRatioList);
+            var h = parseFloat(hInput.text) * ratioValue(hRatioList);
+            sizeLabel.text = isNaN(w) || isNaN(h) ? "→ 幅・高さに数値を入れてください"
+                                                  : "→ 作る大きさ：幅 " + round(w) + " × 高さ " + round(h) + " px";
+        };
+        wRatioList.onChange = updateSize;
+        hRatioList.onChange = updateSize;
+        wInput.onChanging = updateSize;
+        hInput.onChanging = updateSize;
+        updateSize();
         var resetBtn = layoutPanel.add("button", undefined, "初期値に戻す");
         layoutPanel.add("statictext", undefined, "※ 下地・ヘッダー・テーブルがすでにあるときは、そちらの位置を使います");
         resetBtn.onClick = function () {
@@ -302,6 +334,9 @@
             yInput.text = String(CONFIG.layout.y);
             wInput.text = String(CONFIG.layout.w);
             hInput.text = String(CONFIG.layout.h);
+            wRatioList.selection = 0;
+            hRatioList.selection = 0;
+            updateSize();
         };
 
         var optPanel = dlg.add("panel", undefined, "オプション");
@@ -349,9 +384,15 @@
             alert("行数・列数には1以上の整数を入力してください。");
             return null;
         }
-        var layout = {
+        var input = {
             x: parseFloat(xInput.text), y: parseFloat(yInput.text),
-            w: parseFloat(wInput.text), h: parseFloat(hInput.text)
+            w: parseFloat(wInput.text), h: parseFloat(hInput.text),
+            wr: wRatioList.selection ? wRatioList.selection.index : 0,
+            hr: hRatioList.selection ? hRatioList.selection.index : 0
+        };
+        var layout = {
+            x: input.x, y: input.y,
+            w: input.w * CONFIG.ratios[input.wr].value, h: input.h * CONFIG.ratios[input.hr].value
         };
         if (isNaN(layout.x) || isNaN(layout.y) || !(layout.w > 0) || !(layout.h > 0)) {
             alert("位置と大きさには数値を入力してください（幅・高さは 0 より大きい値）。");
@@ -362,7 +403,7 @@
             alert("表が小さすぎます。幅は " + minW + " px、高さは " + minH + " px より大きくしてください。");
             return null;
         }
-        saveLayout(layout);
+        saveLayout(input);
         return {
             layout: layout,
             csvFile: csvFile,
@@ -389,18 +430,26 @@
     }
 
     // 前回入力した位置と大きさを読む（なければ初期値）
+    function ratioValue(list) {
+        return list.selection ? CONFIG.ratios[list.selection.index].value : 1;
+    }
+
+    // 前回入力した値（X・Y・幅・高さ・幅の割合・高さの割合）
     function loadLayout() {
-        var l = { x: CONFIG.layout.x, y: CONFIG.layout.y, w: CONFIG.layout.w, h: CONFIG.layout.h };
+        var l = { x: CONFIG.layout.x, y: CONFIG.layout.y, w: CONFIG.layout.w, h: CONFIG.layout.h, wr: 0, hr: 0 };
         var f = new File(CONFIG.settingsFile);
         try {
             if (f.exists && f.open("r")) {
                 var v = f.read().split(",");
                 f.close();
-                if (v.length === 4) {
+                if (v.length >= 4) {
                     var n = [parseFloat(v[0]), parseFloat(v[1]), parseFloat(v[2]), parseFloat(v[3])];
                     if (!isNaN(n[0]) && !isNaN(n[1]) && n[2] > 0 && n[3] > 0) {
-                        l = { x: n[0], y: n[1], w: n[2], h: n[3] };
+                        l = { x: n[0], y: n[1], w: n[2], h: n[3], wr: 0, hr: 0 };
                     }
+                    var wr = parseInt(v[4], 10), hr = parseInt(v[5], 10);
+                    if (wr >= 0 && wr < CONFIG.ratios.length) l.wr = wr;
+                    if (hr >= 0 && hr < CONFIG.ratios.length) l.hr = hr;
                 }
             }
         } catch (e) {}
@@ -411,7 +460,7 @@
         var f = new File(CONFIG.settingsFile);
         try {
             if (f.open("w")) {
-                f.write([l.x, l.y, l.w, l.h].join(","));
+                f.write([l.x, l.y, l.w, l.h, l.wr, l.hr].join(","));
                 f.close();
             }
         } catch (e) {}
