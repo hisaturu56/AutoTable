@@ -86,6 +86,7 @@
         data = readCSV(opts.csvFile);
         if (!data) return;
         opts.rows = data.length;
+        opts.character = hasImageColumn(data);
         var maxLen = 0;
         for (var d = 0; d < data.length; d++) maxLen = Math.max(maxLen, data[d].length);
         opts.cols = maxLen - (opts.character ? 1 : 0);
@@ -238,6 +239,9 @@
         var colsInput = g2.add("edittext", undefined, String(CONFIG.defaultCols));
         colsInput.characters = 4;
         g2.add("statictext", undefined, "（キャラ欄を除く）");
+        var charCheck = sizePanel.add("checkbox", undefined, "左端にキャラ欄（正方形）を入れる");
+        charCheck.value = CONFIG.defaultCharacter;
+        sizePanel.add("statictext", undefined, "※ CSV を使うときは、1 列目が画像ファイルならキャラ欄ありになります");
 
         var layoutPanel = dlg.add("panel", undefined, "表全体（下地）の位置と大きさ（px・基準点は中心）");
         layoutPanel.alignChildren = "left";
@@ -267,8 +271,6 @@
 
         var optPanel = dlg.add("panel", undefined, "オプション");
         optPanel.alignChildren = "left";
-        var charCheck = optPanel.add("checkbox", undefined, "左端にキャラ欄（正方形）を入れる");
-        charCheck.value = CONFIG.defaultCharacter;
         var roughCheck = optPanel.add("checkbox", undefined, "ラフ効果をかける（手描き風のギザギザ）");
         roughCheck.value = CONFIG.rough.enabled;
         var fitCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを表にぴったり合わせる（ラフのはみ出しも含む）");
@@ -388,6 +390,18 @@
             return null;
         }
         return rows;
+    }
+
+    // 1 列目が画像ファイル（空欄も可）だけなら、キャラ欄ありの表とみなす
+    function hasImageColumn(rows) {
+        var found = false;
+        for (var i = 0; i < rows.length; i++) {
+            var v = rows[i][0] || "";
+            if (v === "") continue;
+            if (!/\.(png|jpe?g|psd|tiff?|gif|bmp|ai|eps|pdf|svg)$/i.test(v)) return false;
+            found = true;
+        }
+        return found;
     }
 
     // ダブルクォートで囲んだ値（カンマや改行を含む値）にも対応する
