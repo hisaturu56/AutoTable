@@ -12,7 +12,17 @@ Illustrator の「ウィンドウ」メニューから開いて、出しっぱ�
 | 表を作る | `ポロライドテーブル自動作成.jsx` |
 | キャラ画像の調整・書き出し | `キャラ画像の調整.jsx` |
 
-### 入れ方（Windows）
+### 入れ方（おすすめ：ZXP UXP installer）
+
+1. `PolaroidTable.zxp` をダウンロードする
+2. ZXP UXP installer を開いて、`PolaroidTable.zxp` をドラッグ＆ドロップする（または「開く」から選ぶ）
+3. Illustrator を再起動して、「ウィンドウ」→「エクステンション」→「ポロライドテーブル自動作成」を開く
+
+- 新しい `.zxp` が来たら、同じように入れれば上書きされる。消すときも ZXP UXP installer から
+- `.zxp` には自己署名の証明書で署名している（`tools/SignZxp.java`。Adobe の ZXPSignCmd と同じ形式）。インストーラーで「発行元を確認できない」などの注意が出ても、そのまま進めてよい
+- パネルが出ないときは、下の `install.bat` を 1 回実行する（署名なしのパネルを読み込む設定もするため）
+
+### 入れ方（ZXP が使えないとき：install.bat）
 
 1. `PolaroidTable_panel.zip` を展開する（右クリック →「すべて展開」）
 2. 中の `install.bat` をダブルクリックする（「Windows によって PC が保護されました」と出たら「詳細情報」→「実行」）
@@ -22,7 +32,7 @@ Illustrator の「ウィンドウ」メニューから開いて、出しっぱ�
 - スクリプトが新しくなったら、新しい zip で 1〜3 をやり直す（上書きされる）
 - 消すときは `uninstall.bat` をダブルクリック
 - `install.bat` は、署名していない手作りのパネルを Illustrator が読み込めるようにする設定（PlayerDebugMode）も一緒に行う
-- zip は `python3 tools/build_panel.py` で作る（`dist/PolaroidTable_panel.zip`）。中のスクリプトは `scripts/` のコピー
+- `.zxp` と zip は `python3 tools/build_panel.py` で作る（`dist/PolaroidTable.zxp`・`dist/PolaroidTable_panel.zip`。Java 17 以降が必要）。中のスクリプトは `scripts/` のコピー
 
 ## 使い方（スクリプトとして実行する場合）
 
@@ -180,7 +190,8 @@ CLAUDE.md                             Claude 向けの作業メモ（決まっ�
 scripts/ポロライドテーブル自動作成.jsx  表を作成するスクリプト
 scripts/キャラ画像の調整.jsx            キャラ画像の拡大率と位置をスライダーで調整するスクリプト
 panel/                                パネル本体（ボタンで scripts/ のスクリプトを実行する）
-tools/build_panel.py                  パネルのインストール用 zip を作る
+tools/build_panel.py                  パネルのインストール用ファイル（.zxp と zip）を作る
+tools/SignZxp.java                    .zxp に署名を付ける
 samples/基礎ステータス_サンプル.csv   CSV の例（数値はダミー）
 tables/                               Notion から作った表データ（CSV）
 docs/Notionから表データを作る手順.md  表の大きさの決め方と CSV の作り方

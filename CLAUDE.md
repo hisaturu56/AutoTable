@@ -5,7 +5,7 @@ Illustrator 用の基礎ステータス表作成スクリプト（`scripts/ポ�
 ## 進め方
 - ユーザーとのやりとりは日本語。専門用語はかみくだいて説明する
 - スクリプトを変えたら README.md・docs/開発記録.md（必要なら docs/計画.md）も一緒に更新し、コミットして main に push する
-- **スクリプトを変えたら毎回、`python3 tools/build_panel.py` でパネルの zip（`dist/PolaroidTable_panel.zip`）を作り直して SendUserFile でユーザーに送り、入れ替え方（ダウンロード → 展開 → install.bat → Illustrator 再起動）を説明する**（ユーザーの希望。ユーザーはパネルで使う）
+- **スクリプトを変えたら毎回、`python3 tools/build_panel.py` でパネルの `.zxp`（`dist/PolaroidTable.zxp`）を作り直して SendUserFile でユーザーに送り、入れ替え方（ダウンロード → ZXP UXP installer にドラッグ＆ドロップ → Illustrator 再起動）を説明する**（ユーザーの希望。ユーザーはパネルを ZXP UXP installer で管理する。zip と install.bat は予備）
 - `.jsx` は UTF-8（BOM 付き）のまま保つ（Windows 版 Illustrator で日本語が文字化けしないように）
 - 作業環境に Illustrator はないので、確認できるのは構文チェックまで。実機での確認はユーザーに依頼する
 

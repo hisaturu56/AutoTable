@@ -1,4 +1,10 @@
-"""パネルのインストール用 zip（dist/PolaroidTable_panel.zip）を作る。
+"""パネルのインストール用ファイルを作る。
+
+- dist/PolaroidTable.zxp        ZXP UXP installer などで入れる署名付きファイル（おすすめ）
+- dist/PolaroidTable_panel.zip  install.bat で入れる zip（ZXP が使えないとき用）
+
+.zxp の署名には自己署名の証明書（tools/zxp-cert.p12、なければ keytool で作る。git には入れない）を使う。
+署名は tools/SignZxp.java（Java 17 以降）で付ける。
 
 zip の中身：
   install.bat               ダブルクリックでパネルを入れる
@@ -10,10 +16,17 @@ zip の中身：
 Windows で zip を展開したときに日本語のファイル名が化けないよう、zip の中のファイル名は英語にする。
 """
 import pathlib
+import shutil
+import subprocess
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-OUT = ROOT / "dist" / "PolaroidTable_panel.zip"
+DIST = ROOT / "dist"
+OUT = DIST / "PolaroidTable_panel.zip"
+ZXP = DIST / "PolaroidTable.zxp"
+STAGE = DIST / "PolaroidTable"
+CERT = ROOT / "tools" / "zxp-cert.p12"
+CERT_PASSWORD = "polaroidtable"  # 自己署名の証明書用（秘密の情報ではない）
 
 SCRIPTS = {
     "create_table.jsx": "ポロライドテーブル自動作成.jsx",
@@ -58,17 +71,42 @@ def crlf(text):
     return text.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
 
 
-def main():
-    OUT.parent.mkdir(exist_ok=True)
+def stage():
+    """パネルのフォルダ（panel/ + スクリプト）を dist/PolaroidTable に組み立てる"""
+    if STAGE.exists():
+        shutil.rmtree(STAGE)
+    shutil.copytree(ROOT / "panel", STAGE)
+    (STAGE / "jsx").mkdir()
+    for name, source in SCRIPTS.items():
+        shutil.copyfile(ROOT / "scripts" / source, STAGE / "jsx" / name)
+
+
+def build_zip():
     with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("install.bat", crlf(INSTALL))
         z.writestr("uninstall.bat", crlf(UNINSTALL))
-        for path in sorted((ROOT / "panel").rglob("*")):
+        for path in sorted(STAGE.rglob("*")):
             if path.is_file():
-                z.write(path, "PolaroidTable/" + path.relative_to(ROOT / "panel").as_posix())
-        for name, source in SCRIPTS.items():
-            z.write(ROOT / "scripts" / source, "PolaroidTable/jsx/" + name)
+                z.write(path, "PolaroidTable/" + path.relative_to(STAGE).as_posix())
     print(OUT)
+
+
+def build_zxp():
+    if not CERT.exists():
+        subprocess.run(["keytool", "-genkeypair", "-alias", "polaroidtable", "-keyalg", "RSA", "-keysize", "2048",
+                        "-validity", "9125", "-storetype", "PKCS12", "-keystore", str(CERT),
+                        "-storepass", CERT_PASSWORD, "-keypass", CERT_PASSWORD,
+                        "-dname", "CN=PolaroidTable, O=hisaturu56, C=JP"], check=True)
+    # ignoreLineBreaks：署名の値を改行なしで書く（ほかのツールでも読みやすい形）
+    subprocess.run(["java", "-Dcom.sun.org.apache.xml.internal.security.ignoreLineBreaks=true", str(ROOT / "tools" / "SignZxp.java"), str(STAGE), str(ZXP), str(CERT), CERT_PASSWORD],
+                   check=True)
+
+
+def main():
+    DIST.mkdir(exist_ok=True)
+    stage()
+    build_zip()
+    build_zxp()
 
 
 if __name__ == "__main__":
