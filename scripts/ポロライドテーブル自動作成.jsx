@@ -99,7 +99,13 @@
         data = readCSV(opts.csvFile);
         if (!data) return;
         opts.rows = data.length;
-        opts.character = hasImageColumn(data);
+        // キャラ欄のチェックに合わせて、CSV の画像の列を外す／空のキャラ欄の列を足す
+        var hasImages = hasImageColumn(data);
+        if (hasImages && !opts.character) {
+            for (var d0 = 0; d0 < data.length; d0++) data[d0].shift();
+        } else if (!hasImages && opts.character) {
+            for (var d1 = 0; d1 < data.length; d1++) data[d1].unshift("");
+        }
         var maxLen = 0;
         for (var d = 0; d < data.length; d++) maxLen = Math.max(maxLen, data[d].length);
         opts.cols = maxLen - (opts.character ? 1 : 0);
@@ -271,7 +277,7 @@
         var pickBtn  = csvBtns.add("button", undefined, "CSVを選ぶ…");
         var clearBtn = csvBtns.add("button", undefined, "クリア");
 
-        var sizePanel = dlg.add("panel", undefined, "サイズ（CSV を使わないとき）");
+        var sizePanel = dlg.add("panel", undefined, "サイズ（行数・列数は CSV を使わないとき）");
         sizePanel.alignChildren = "left";
         var g1 = sizePanel.add("group");
         g1.add("statictext", undefined, "行数：");
@@ -284,7 +290,7 @@
         g2.add("statictext", undefined, "（キャラ欄を除く）");
         var charCheck = sizePanel.add("checkbox", undefined, "左端にキャラ欄（正方形）を入れる");
         charCheck.value = CONFIG.defaultCharacter;
-        sizePanel.add("statictext", undefined, "※ CSV を使うときは、1 列目が画像ファイルならキャラ欄ありになります");
+        sizePanel.add("statictext", undefined, "※ CSV を選ぶと、1 列目が画像ファイルかどうかで自動で切り替わります（あとから変えられます）");
 
         var layoutPanel = dlg.add("panel", undefined, "表全体（下地）の位置と大きさ（px・基準点は中心）");
         layoutPanel.alignChildren = "left";
@@ -350,7 +356,7 @@
         // キャラ欄がない表はすぐ書き出し、ある表は調整が終わってから書き出す（初期値。チェックで変えられる）
         exportCheck.value = !charCheck.value;
         charCheck.onClick = function () {
-            if (!csvFile) exportCheck.value = !charCheck.value;
+            exportCheck.value = !charCheck.value;
         };
 
         var btns = dlg.add("group");
@@ -364,15 +370,20 @@
             if (f) {
                 csvFile = f;
                 csvLabel.text = decodeURI(f.name);
-                sizePanel.enabled = false;
+                g1.enabled = false;
+                g2.enabled = false;
                 var rowsData = readCSV(f);
-                if (rowsData) exportCheck.value = !hasImageColumn(rowsData);
+                if (rowsData) {
+                    charCheck.value = hasImageColumn(rowsData);
+                    exportCheck.value = !charCheck.value;
+                }
             }
         };
         clearBtn.onClick = function () {
             csvFile = null;
             csvLabel.text = "（CSV を選ばないと空の表を作ります）";
-            sizePanel.enabled = true;
+            g1.enabled = true;
+            g2.enabled = true;
             exportCheck.value = !charCheck.value;
         };
 
