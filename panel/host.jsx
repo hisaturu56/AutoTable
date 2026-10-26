@@ -45,6 +45,32 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         return found;
     }
 
+    // 台本を自動で選ぶための名前：ドキュメント名と、配置した画像などのファイル名（拡張子を取る。500 個まで）
+    //   key は、手で選んだ台本を覚えておくときの見分け（保存してあればファイルの場所、なければ名前）
+    function docNames() {
+        var doc = activeDoc();
+        if (!doc) return json(null);
+        var key = doc.name;
+        try {
+            if (doc.fullName && doc.fullName.exists) key = doc.fullName.fsName;
+        } catch (e) {}
+        var names = [{ name: doc.name.replace(/\.[^.]+$/, ""), kind: "ドキュメント" }];
+        var seen = {};
+        for (var i = 0; i < doc.placedItems.length && names.length < 500; i++) {
+            var n = null;
+            try {
+                n = decodeURI(doc.placedItems[i].file.name).replace(/\.[^.]+$/, "");
+            } catch (e) {
+                n = null;  // リンクが切れている画像
+            }
+            if (n && !seen[n]) {
+                seen[n] = true;
+                names.push({ name: n, kind: "ファイル" });
+            }
+        }
+        return json({ key: key, names: names });
+    }
+
     // パネルの設定で表を作る。scriptPath は create_table.jsx の場所
     function createTable(scriptPath, options) {
         $.global.PT_CREATE_OPTIONS = options;
@@ -405,6 +431,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
 
     return {
         pickCSVs: pickCSVs,
+        docNames: docNames,
         getTextSize: getTextSize,
         setTextSize: setTextSize,
         createTable: createTable,

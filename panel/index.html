@@ -35,10 +35,16 @@
   .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #status { min-height: 1.5em; white-space: pre-wrap; word-break: break-all; }
   #boards label.c { word-break: break-all; }
-  #csvList .csv { display: flex; align-items: center; gap: 4px; margin: 2px 0; }
-  #csvList .csv .name { word-break: break-all; white-space: normal; }
-  #csvList .csv label { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; color: var(--note); font-size: 11px; }
-  #csvList .csv button { margin: 0; padding: 0 6px; }
+  .list .csv { display: flex; align-items: center; gap: 4px; margin: 2px 0; }
+  .list .csv .name { word-break: break-all; white-space: normal; }
+  .list .csv label { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; color: var(--note); font-size: 11px; }
+  .list .csv button { margin: 0; padding: 0 6px; }
+  .source { display: flex; gap: 12px; margin: 2px 0 6px; }
+  .source label { display: flex; align-items: center; gap: 4px; }
+  details { margin: 6px 0 0; }
+  summary { cursor: pointer; color: var(--note); }
+  input[type=password] { flex: 1; min-width: 0; padding: 3px 4px; border: 1px solid var(--line); border-radius: 2px;
+         background: var(--field); color: var(--fg); font: inherit; }
   html, body { height: 100%; }
   /* スクロールバーを Illustrator の見た目に合わせる */
   ::-webkit-scrollbar { width: 8px; }
@@ -56,15 +62,43 @@
   <!-- ================= 表を作る ================= -->
   <section id="create" class="on">
     <fieldset>
-      <legend>データ（CSV）</legend>
-      <div id="csvList"></div>
-      <button id="csvPick" class="wide">CSV を追加…（複数選べます）</button>
-      <div class="grid2" style="grid-template-columns: 1fr 1fr 1fr;">
-        <button id="csvAll">全部選ぶ</button>
-        <button id="csvNone">全部外す</button>
-        <button id="csvClear">空にする</button>
+      <legend>データ</legend>
+      <div class="source">
+        <label><input type="radio" name="source" value="notion">Notion</label>
+        <label><input type="radio" name="source" value="csv">CSV</label>
       </div>
-      <div class="note">チェックした CSV の表をまとめて作ります（1 つの CSV ＝ 1 つのアートボード）。「キャラ欄」は CSV ごとに変えられます</div>
+
+      <div id="notionBox">
+        <div class="row"><label class="k">台本</label><select id="script"></select></div>
+        <div id="scriptNote" class="note"></div>
+        <div id="notionList" class="list"></div>
+        <div class="grid2" style="grid-template-columns: 1fr 1fr 1fr;">
+          <button id="notionReload">読み直す</button>
+          <button id="notionAll">全部選ぶ</button>
+          <button id="notionNone">全部外す</button>
+        </div>
+        <div class="note">台本ページの中の「ポロライドテーブル_表リスト」を読みます。チェックした表をまとめて作ります（1 つの表 ＝ 1 つのアートボード）</div>
+        <details id="tokenBox">
+          <summary>Notion の設定（トークン）：<span id="tokenState"></span></summary>
+          <div class="row"><input type="password" id="tokenInput" placeholder="ntn_ または secret_ で始まるトークン" autocomplete="off"></div>
+          <div class="grid2">
+            <button id="tokenSave">登録する</button>
+            <button id="tokenRemove">登録を消す</button>
+          </div>
+          <div class="note">Premiere と同じコネクション「レターボックス_自動テロップ」のトークンを入れます。Windows の暗号化でこのパソコンの中にしまい、画面には出しません</div>
+        </details>
+      </div>
+
+      <div id="csvBox">
+        <div id="csvList" class="list"></div>
+        <button id="csvPick" class="wide">CSV を追加…（複数選べます）</button>
+        <div class="grid2" style="grid-template-columns: 1fr 1fr 1fr;">
+          <button id="csvAll">全部選ぶ</button>
+          <button id="csvNone">全部外す</button>
+          <button id="csvClear">空にする</button>
+        </div>
+        <div class="note">チェックした CSV の表をまとめて作ります（1 つの CSV ＝ 1 つのアートボード）。「キャラ欄」は CSV ごとに変えられます</div>
+      </div>
     </fieldset>
 
     <fieldset>
@@ -98,7 +132,7 @@
       <label class="c"><input type="checkbox" id="rough">ラフ効果をかける</label>
       <label class="c"><input type="checkbox" id="fitArtboard">アートボードを表にぴったり合わせる</label>
       <label class="c"><input type="checkbox" id="overwrite">同じ名前の表があれば作り直す（上書き）</label>
-      <div class="note">CSV と同じ名前のアートボードの表を消して、同じ位置に作り直します（CSV を使わないときは、今のアートボードの表）</div>
+      <div class="note">同じ名前（Notion は「台本タイトル_表の名前」、CSV はファイル名）のアートボードの表を消して、同じ位置に作り直します（空の表のときは、今のアートボードの表）</div>
       <div class="note">PNG の書き出しは「書き出し」タブで行います</div>
     </fieldset>
 
@@ -152,6 +186,9 @@
 
   <div id="status" class="note"></div>
 
+<script src="match.js"></script>
+<script src="notion.js"></script>
+<script src="token.js"></script>
 <script>
 (function () {
   var cep = window.__adobe_cep__;
@@ -271,7 +308,13 @@
       overwrite: $("overwrite").checked
     };
     var jobs = [];
-    if (!csvs.length) {
+    if (source === "notion") {
+      var script = currentScript();
+      notionTables.forEach(function (t) {
+        if (t.checked) jobs.push({ name: t.name, data: t.rows, tableName: script.title + "_" + t.name, character: t.character });
+      });
+      if (!jobs.length) { setStatus(notionTables.length ? "作る表にチェックを入れてください。" : "Notion から読んだ表がありません。"); return; }
+    } else if (!csvs.length) {
       jobs.push({ name: "表", csvPath: "", character: $("character").checked });
     } else {
       csvs.forEach(function (c) { if (c.checked) jobs.push({ name: c.name, csvPath: c.path, character: c.character }); });
@@ -289,9 +332,13 @@
       var job = jobs[i];
       var options = {};
       for (var k in base) options[k] = base[k];
-      options.csvPath = job.csvPath;
+      options.csvPath = job.csvPath || "";
       options.character = job.character;
-      setStatus("表を作っています…（" + (i + 1) + " / " + jobs.length + "）" + (job.csvPath ? job.name : ""));
+      if (job.data) {
+        options.data = job.data;
+        options.tableName = job.tableName;
+      }
+      setStatus("表を作っています…（" + (i + 1) + " / " + jobs.length + "）" + (job.csvPath || job.data ? job.name : ""));
       call("PT.createTable(" + arg(folder + "/jsx/create_table.jsx") + ", " + arg(options) + ")", function (res) {
         if (!res) { busy(false); return; }  // エラーのときは止める（メッセージは表示済み）
         if (res.message) made.push(jobs.length === 1 ? res.message : "【" + job.name + "】" + res.message.split("\n")[0]);
@@ -302,43 +349,189 @@
 
   // CSV の一覧を表示する（作る・キャラ欄のチェック、× で一覧から外す）
   function updateCSV() {
-    var box = $("csvList");
+    renderList($("csvList"), csvs, "（CSV を追加しないと空の表を作ります）", function () { save("csvs", csvs); },
+               function (i) { csvs.splice(i, 1); updateCSV(); });
+    updateSizeInputs();
+    save("csvs", csvs);
+  }
+
+  // 表の一覧（CSV・Notion 共通）：作る・キャラ欄のチェック。onRemove があれば × で外せる
+  function renderList(box, items, empty, onChange, onRemove) {
     box.innerHTML = "";
-    if (!csvs.length) {
-      box.innerHTML = '<div class="note">（CSV を追加しないと空の表を作ります）</div>';
-    }
-    csvs.forEach(function (c, i) {
+    if (!items.length) box.innerHTML = '<div class="note">' + empty + '</div>';
+    items.forEach(function (c, i) {
       var row = document.createElement("div");
       row.className = "csv";
       var make = document.createElement("input");
       make.type = "checkbox";
       make.checked = c.checked;
-      make.title = "この CSV の表を作る";
-      make.addEventListener("change", function () { c.checked = make.checked; save("csvs", csvs); });
+      make.title = "この表を作る";
+      make.addEventListener("change", function () { c.checked = make.checked; onChange(); });
       var name = document.createElement("span");
       name.className = "name";
       name.textContent = c.name;
-      name.title = c.path;
+      name.title = c.path || c.name;
       var charLabel = document.createElement("label");
       var charCheck = document.createElement("input");
       charCheck.type = "checkbox";
       charCheck.checked = c.character;
-      charCheck.addEventListener("change", function () { c.character = charCheck.checked; save("csvs", csvs); });
+      charCheck.addEventListener("change", function () { c.character = charCheck.checked; onChange(); });
       charLabel.appendChild(charCheck);
       charLabel.appendChild(document.createTextNode("キャラ欄"));
-      var remove = document.createElement("button");
-      remove.textContent = "×";
-      remove.title = "一覧から外す（ファイルは消えません）";
-      remove.addEventListener("click", function () { csvs.splice(i, 1); updateCSV(); });
       row.appendChild(make);
       row.appendChild(name);
       row.appendChild(charLabel);
-      row.appendChild(remove);
+      if (onRemove) {
+        var remove = document.createElement("button");
+        remove.textContent = "×";
+        remove.title = "一覧から外す（ファイルは消えません）";
+        remove.addEventListener("click", function () { onRemove(i); });
+        row.appendChild(remove);
+      }
       box.appendChild(row);
     });
-    $("rows").disabled = $("cols").disabled = $("character").disabled = csvs.length > 0;
-    save("csvs", csvs);
   }
+
+  // 行数・列数・キャラ欄は、CSV を使わずに空の表を作るときだけ
+  function updateSizeInputs() {
+    $("rows").disabled = $("cols").disabled = $("character").disabled = source === "notion" || csvs.length > 0;
+  }
+
+  // ---------------- Notion ----------------
+
+  var source = load("source", "notion");
+  var scripts = null;          // 台本の一覧（公開日が今日に近い順）
+  var notionTables = [];       // [{ name, rows, hasImages, checked, character }]
+  var docKey = null;           // 手で選んだ台本を覚えるときの、ドキュメントの見分け
+  var choices = load("scriptChoices", {});  // { ドキュメントの見分け: 台本の id }
+
+  function setSource(s) {
+    source = s;
+    save("source", s);
+    var radios = document.querySelectorAll("input[name=source]");
+    for (var i = 0; i < radios.length; i++) radios[i].checked = radios[i].value === s;
+    $("notionBox").style.display = s === "notion" ? "" : "none";
+    $("csvBox").style.display = s === "csv" ? "" : "none";
+    updateSizeInputs();
+    if (s === "notion" && scripts === null) notionLoad(false);
+  }
+  var radios = document.querySelectorAll("input[name=source]");
+  for (var ri = 0; ri < radios.length; ri++) radios[ri].addEventListener("change", function () { setSource(this.value); });
+
+  function currentScript() {
+    var id = $("script").value;
+    for (var i = 0; scripts && i < scripts.length; i++) if (scripts[i].id === id) return scripts[i];
+    return null;
+  }
+
+  function token() {
+    if (!window.PTToken) return Promise.reject(new Error("トークンのしまい方を読み込めませんでした。パネルを入れ直してください。"));
+    return window.PTToken.load();
+  }
+
+  function updateTokenState() {
+    var has = false;
+    try { has = window.PTToken && window.PTToken.exists(); } catch (e) {}
+    $("tokenState").textContent = has ? "登録済み" : "未登録";
+    if (!has) $("tokenBox").open = true;
+  }
+
+  // 台本の一覧を読み、開いているドキュメントに合う台本を選んで、その表を読む
+  //   reloadScripts：台本の一覧も Notion から読み直す
+  function notionLoad(reloadScripts) {
+    updateTokenState();
+    $("scriptNote").textContent = "Notion を読んでいます…";
+    token().then(function (tk) {
+      if (!tk) throw new Error("Notion のトークンが登録されていません。下の「Notion の設定」で登録してください。");
+      var list = scripts && !reloadScripts ? Promise.resolve(scripts) : window.PTNotion.listScripts(tk);
+      return list.then(function (all) {
+        scripts = window.PTMatch.sortByDate(all, new Date());
+        call("PT.docNames()", function (doc) { chooseScript(doc, tk); });
+      });
+    }).catch(notionFailed);
+  }
+
+  function chooseScript(doc, tk) {
+    var select = $("script");
+    select.innerHTML = "";
+    select.add(new Option("（台本を選んでください）", ""));
+    scripts.forEach(function (s) { select.add(new Option(s.title + (s.date ? "（" + s.date.slice(0, 10) + "）" : ""), s.id)); });
+    docKey = doc ? doc.key : null;
+    var note = "";
+    var remembered = docKey && choices[docKey];
+    if (remembered && scripts.some(function (s) { return s.id === remembered; })) {
+      select.value = remembered;
+      note = "このファイルで前に選んだ台本です。";
+    } else if (doc) {
+      var r = window.PTMatch.pick(doc.names, scripts, new Date());
+      if (r.script) {
+        select.value = r.script.id;
+        note = "自動で選びました（" + (r.by.kind === "ファイル" ? "ファイル「" + r.by.name + "」" : "ドキュメント名「" + r.by.name + "」")
+             + "で当たり・似ている度合い " + Math.round(r.score * 100) + "%）。違うときはプルダウンで選び直してください。";
+      } else {
+        note = "近い台本が見つかりませんでした。プルダウンで選んでください。";
+      }
+    } else {
+      note = "ドキュメントが開いていません。プルダウンで台本を選んでください。";
+    }
+    $("scriptNote").textContent = note;
+    loadTables(tk);
+  }
+
+  // 選んだ台本の「ポロライドテーブル_表リスト」を読む
+  function loadTables(tk) {
+    var script = currentScript();
+    notionTables = [];
+    if (!script) { renderNotion("台本を選ぶと、表の一覧が出ます"); return; }
+    renderNotion("表を読んでいます…");
+    (tk ? Promise.resolve(tk) : token()).then(function (t) {
+      return window.PTNotion.readTables(script.id, t);
+    }).then(function (r) {
+      if (!r.db) { renderNotion("この台本には「ポロライドテーブル_表リスト」がありません"); return; }
+      notionTables = r.tables.map(function (t) {
+        return { name: t.name, rows: t.rows, hasImages: t.hasImages, checked: true, character: t.hasImages };
+      });
+      renderNotion("「" + r.db.name + "」に表がありません");
+    }).catch(notionFailed);
+  }
+
+  function renderNotion(empty) {
+    renderList($("notionList"), notionTables, empty, function () {});
+  }
+
+  function notionFailed(e) {
+    $("scriptNote").textContent = e.message;
+    setStatus(e.message);
+    renderNotion("（読めませんでした）");
+  }
+
+  $("script").addEventListener("change", function () {
+    if (docKey) {
+      choices[docKey] = $("script").value;  // このファイルでは、次からもこの台本を選ぶ
+      save("scriptChoices", choices);
+    }
+    $("scriptNote").textContent = $("script").value ? "手で選んだ台本です（このファイルでは次からもこれを選びます）。" : "";
+    loadTables(null);
+  });
+  $("notionReload").addEventListener("click", function () { setStatus(""); notionLoad(true); });
+  $("notionAll").addEventListener("click", function () { notionTables.forEach(function (t) { t.checked = true; }); renderNotion(""); });
+  $("notionNone").addEventListener("click", function () { notionTables.forEach(function (t) { t.checked = false; }); renderNotion(""); });
+
+  $("tokenSave").addEventListener("click", function () {
+    var value = $("tokenInput").value;
+    if (!window.PTToken) { setStatus("トークンのしまい方を読み込めませんでした。"); return; }
+    window.PTToken.save(value).then(function () {
+      $("tokenInput").value = "";
+      $("tokenBox").open = false;
+      setStatus("トークンを登録しました。");
+      notionLoad(true);
+    }).catch(function (e) { setStatus(e.message); });
+  });
+  $("tokenRemove").addEventListener("click", function () {
+    if (window.PTToken) window.PTToken.remove();
+    updateTokenState();
+    setStatus("トークンの登録を消しました。");
+  });
 
   function updateSize() {
     var w = parseFloat($("w").value) * RATIOS[$("wr").value || 0].value;
@@ -624,6 +817,7 @@
     } catch (e) {}
   }
 
+  setSource(source === "csv" ? "csv" : "notion");
   var lastTab = load("tab", "create");
   if (lastTab !== "create") showTab(lastTab);
 })();

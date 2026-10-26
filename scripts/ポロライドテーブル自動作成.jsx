@@ -97,9 +97,13 @@
     if (!opts) return;
 
     var data = null;
-    if (opts.csvFile) {
-        data = readCSV(opts.csvFile);
-        if (!data) return;
+    if (opts.csvFile || opts.data) {
+        // CSV か、パネルが Notion から読んだ表（行の配列）
+        data = opts.csvFile ? readCSV(opts.csvFile) : opts.data;
+        if (!data || !data.length) {
+            if (!opts.csvFile) alert("表のデータが空です。");
+            return;
+        }
         opts.rows = data.length;
         // キャラ欄のチェックに合わせて、CSV の画像の列を外す／空のキャラ欄の列を足す
         var hasImages = hasImageColumn(data);
@@ -126,7 +130,7 @@
 
     // 表の名前：CSV のファイル名（例：(テスト)表作成テスト用台本_1_基礎ステータス比較）。CSV がなければ「表1」「表2」…
     // アートボード名・レイヤー名・PNG のファイル名に使う
-    var tableName = opts.csvFile ? decodeURI(opts.csvFile.name).replace(/\.csv$/i, "") : "";
+    var tableName = opts.csvFile ? decodeURI(opts.csvFile.name).replace(/\.csv$/i, "") : (opts.tableName || "");
 
     // 作り直し：前の表を消して、同じ位置（下地の中心）に作り直す
     // CSV のときは同じ名前（CSV のファイル名）のアートボードの表、CSV を使わないときは今のアートボードの表
@@ -462,7 +466,7 @@
             return null;
         }
         var rows = parseInt(p.rows, 10), cols = parseInt(p.cols, 10);
-        if (!csvFile && (!(rows >= 1) || !(cols >= 1))) {
+        if (!csvFile && !p.data && (!(rows >= 1) || !(cols >= 1))) {
             alert("行数・列数には1以上の整数を入力してください。");
             return null;
         }
@@ -484,8 +488,21 @@
             character: !!p.character,
             rough: !!p.rough,
             fitArtboard: !!p.fitArtboard,
-            overwrite: !!p.overwrite
+            overwrite: !!p.overwrite,
+            data: p.data ? copyRows(p.data) : null,  // Notion から読んだ表（CSV の代わり）
+            tableName: p.tableName ? String(p.tableName) : ""
         };
+    }
+
+    // パネルから渡された表のデータを、文字の配列の配列にする（CSV を読んだときと同じ形）
+    function copyRows(rows) {
+        var out = [];
+        for (var i = 0; i < rows.length; i++) {
+            var row = [];
+            for (var j = 0; j < rows[i].length; j++) row.push(rows[i][j] === null || rows[i][j] === undefined ? "" : String(rows[i][j]));
+            out.push(row);
+        }
+        return out;
     }
 
     // 下地の位置と大きさから、ヘッダーとテーブルの位置と大きさを計算する（余白はすべて margin）
