@@ -45,11 +45,19 @@
             text:   [215, 215, 215]
         },
 
-        // マスの文字。フォントが見つからなければ既定のフォント。マスに入りきらなければ自動で縮める
+        // マスの文字。フォントが見つからなければ既定のフォント
         // ヘッダーの帯の文字は AE でアニメーションさせるので、ここでは入れない
+        //
+        // 文字の大きさは表全体でそろえ、マスの大きさに合わせて決める：
+        //   1. マスの高さが refCellHeight のときに size になる比率で、マスの高さに比例させる（size が上限）
+        //   2. 一番長い文字がマスの幅（左右 padding を除く）に収まるところまで、表全体をまとめて縮める
+        //   文字と数字は同じ割合で縮むので、文字と数字の大きさのバランスは変わらない
+        // 基準のマスの高さ。参考画像では 3〜7 行まで文字の大きさは同じ（高さ 約 36 px）だったので、
+        // 7 行のマスの高さ（初期値の表で 70.714 px）までは size のまま、これより低いマスで縮め始める
+        refCellHeight: 70.714,
         text: {
             family: "Noto Sans JP", style: "Black",
-            size: 40,                  // 参考画像の「タフィー」の高さ（約 36 px）に合わせた値
+            size: 40,                  // 基準の大きさ（参考画像の「タフィー」の高さ 約 36 px に合わせた値）
             padding: 12,               // マスの左右に空ける余白
             formatNumbers: true        // 数字だけの値に 3 桁区切りのカンマを付ける（3088 → 3,088）
         },
@@ -58,7 +66,7 @@
         //（カンマが下にはみ出す分、全体で中央に合わせると上に寄って見えるため）
         number: {
             family: "Bahnschrift", style: "Bold",
-            size: 46,                  // 参考画像の数字の高さ（カンマを除いて約 32 px）に合わせた値
+            size: 46,                  // 基準の大きさ（参考画像の数字の高さ、カンマを除いて約 32 px）
             offsetY: 0                 // さらに下げたいときは正の値（px）
         },
 
@@ -141,6 +149,7 @@
 
     // ---- マスを作る（1マス＝1グループ：長方形・画像・文字） ----
     var cells = [];
+    var cellTexts = [];
     for (var r = 0; r < opts.rows; r++) {
         var top = body.top - r * (cellH + CONFIG.gap);
         var row = data ? data[r] : [];
@@ -154,10 +163,12 @@
             var left = statX + c * (colW + CONFIG.gap);
             var cell = makeCell("行" + (r + 1) + "_列" + (c + 1), top, left, colW, cellH);
             var value = row[col + c];
-            if (value) addCellText(cell.group, value, top, left, colW, cellH);
+            if (value) cellTexts.push(addCellText(cell.group, value, top, left, colW, cellH));
         }
     }
     if (templateRect) templateRect.remove();  // 元の「テーブル」の長方形はマス目に置き換える
+
+    var textScale = layoutCellTexts(cellTexts, cellH);
 
     var roughFailed = false;
     if (opts.rough) {
@@ -193,7 +204,8 @@
 
     var msg = "ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
             + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? "、ラフあり" : "、ラフなし") + "）\n"
-            + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px";
+            + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px\n"
+            + "文字の大きさ：文字 " + round(CONFIG.text.size * textScale) + " pt ／ 数字 " + round(CONFIG.number.size * textScale) + " pt";
     if (fitted) msg += "\n\nアートボードを表に合わせました：" + fitted.w + " × " + fitted.h + " px";
     if (exported) msg += "\n\nPNG を書き出しました：\n" + exported.fsName;
     if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
@@ -470,27 +482,43 @@
         return p;
     }
 
+    // マスに文字を入れる（大きさと位置は、全部のマスを作ったあとに layoutCellTexts でそろえる）
     function addCellText(container, value, top, left, w, h) {
         var text = CONFIG.text.formatNumbers ? formatNumber(value) : value;
         var isNumber = /^-?[\d,]+(\.\d+)?$/.test(text);
-        var size = isNumber ? CONFIG.number.size : CONFIG.text.size;
 
         var tf = container.textFrames.add();
         tf.contents = text;
-        styleText(tf, isNumber ? numberFont : textFont, size);
+        styleText(tf, isNumber ? numberFont : textFont, isNumber ? CONFIG.number.size : CONFIG.text.size);
         tf.textRange.paragraphAttributes.justification = Justification.CENTER;
+        return { tf: tf, text: text, isNumber: isNumber, top: top, left: left, w: w, h: h };
+    }
 
-        var maxW = w - CONFIG.text.padding * 2;
-        if (tf.width > maxW) {
-            tf.textRange.characterAttributes.size = size * maxW / tf.width;
+    // 表全体の文字の大きさをそろえ、各マスの中央に置く。使った倍率を返す
+    function layoutCellTexts(list, cellH) {
+        // 1. マスの高さに比例（基準より大きいマスでも、基準の大きさを上限にする）
+        var scale = Math.min(1, cellH / CONFIG.refCellHeight);
+
+        // 2. 一番はみ出す文字がマスの幅に収まるように、表全体をまとめて縮める
+        //   （いまは基準の大きさで入っているので、幅は基準の大きさで測る）
+        for (var i = 0; i < list.length; i++) {
+            var maxW = list[i].w - CONFIG.text.padding * 2;
+            var needed = maxW / list[i].tf.width;
+            if (needed < scale) scale = needed;
         }
-        if (isNumber) {
-            // 縦位置はカンマ・小数点を除いた数字だけの形で中央に合わせる
-            alignByGlyphs(tf, left + w / 2, top - h / 2 - CONFIG.number.offsetY, text.replace(/[,.]/g, ""));
-        } else {
-            alignByGlyphs(tf, left + w / 2, top - h / 2);
+
+        for (var j = 0; j < list.length; j++) {
+            var t = list[j];
+            var base = t.isNumber ? CONFIG.number.size : CONFIG.text.size;
+            t.tf.textRange.characterAttributes.size = base * scale;
+            if (t.isNumber) {
+                // 縦位置はカンマ・小数点を除いた数字だけの形で中央に合わせる
+                alignByGlyphs(t.tf, t.left + t.w / 2, t.top - t.h / 2 - CONFIG.number.offsetY * scale, t.text.replace(/[,.]/g, ""));
+            } else {
+                alignByGlyphs(t.tf, t.left + t.w / 2, t.top - t.h / 2);
+            }
         }
-        return tf;
+        return scale;
     }
 
     function styleText(tf, font, size) {
