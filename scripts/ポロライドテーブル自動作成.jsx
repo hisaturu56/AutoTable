@@ -75,7 +75,8 @@
         },
 
         defaultFitArtboard: true,      // ダイアログの初期値：アートボードを表にぴったり合わせる
-        defaultExport: true            // ダイアログの初期値：PNG で書き出す
+        defaultExport: true,           // ダイアログの初期値：PNG で書き出す
+        exportFolderName: "素材"        // PNG の保存先：Illustrator ファイルと同じ場所にあるこの名前のフォルダ（なければ作る）
     };
 
     var opts = showDialog();
@@ -617,9 +618,22 @@
     }
 
     // アクティブなアートボードを背景透過の PNG で書き出す
+    // Illustrator ファイルが保存済みなら、同じ場所の「素材」フォルダへ自動で保存（フォルダがなければ作る）
+    // 未保存のときやフォルダを作れないときは、保存先を選ぶ画面を出す
     function exportPNG(csvFile) {
         var defaultName = csvFile ? decodeURI(csvFile.name).replace(/\.csv$/i, "") + ".png" : "ステータス表.png";
-        var dest = (csvFile ? new File(csvFile.parent.fsName + "/" + defaultName) : new File(defaultName)).saveDlg("PNG の保存先", "*.png");
+        var dest = null;
+        var folder = exportFolder();
+        if (folder) {
+            dest = new File(folder.fsName + "/" + defaultName);
+            if (dest.exists && !confirm("「" + CONFIG.exportFolderName + "」フォルダに同じ名前の PNG があります。上書きしますか？\n"
+                    + dest.fsName + "\n\n「いいえ」を選ぶと、保存先を選ぶ画面を出します。")) {
+                dest = dest.saveDlg("PNG の保存先", "*.png");
+            }
+        } else {
+            var start = csvFile ? csvFile.parent.fsName + "/" : "";
+            dest = new File(start + defaultName).saveDlg("PNG の保存先", "*.png");
+        }
         if (!dest) return null;
 
         doc.artboards.setActiveArtboardIndex(abIndex);
@@ -631,6 +645,20 @@
         o.verticalScale = 100;
         doc.exportFile(dest, ExportType.PNG24, o);
         return dest;
+    }
+
+    // Illustrator ファイルと同じ場所の「素材」フォルダ。ファイルが未保存なら null
+    function exportFolder() {
+        var base = null;
+        try {
+            if (doc.fullName && doc.fullName.exists) base = doc.fullName.parent;
+        } catch (e) {
+            base = null;  // 一度も保存していないドキュメント
+        }
+        if (!base) return null;
+        var folder = new Folder(base.fsName + "/" + CONFIG.exportFolderName);
+        if (!folder.exists && !folder.create()) return null;
+        return folder;
     }
 
     // フォント名（ファミリー名とスタイル名）でフォントを探す。見つからなければ PostScript 名でも探す
