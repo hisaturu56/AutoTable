@@ -158,7 +158,7 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var DEFAULTS = { rows: 6, cols: 5, character: true, x: 960, y: 540, w: 1505, h: 592.5, wr: 0, hr: 0,
-                   rough: true, fitArtboard: true };
+                   rough: true, fitArtboard: true, overwrite: true };
   var RATIOS = [
     { label: "100%（そのまま）", value: 1 },
     { label: "67%（3分の2）", value: 2 / 3 },
@@ -227,11 +227,11 @@
     $("hr").add(new Option(RATIOS[r].label, r));
   }
   ["rows", "cols", "x", "y", "w", "h", "wr", "hr"].forEach(function (k) { $(k).value = form[k]; });
-  ["character", "rough", "fitArtboard"].forEach(function (k) { $(k).checked = !!form[k]; });
+  ["character", "rough", "fitArtboard", "overwrite"].forEach(function (k) { $(k).checked = !!form[k]; });
   updateCSV();
   updateSize();
 
-  ["rows", "cols", "x", "y", "w", "h", "wr", "hr", "character", "rough", "fitArtboard"].forEach(function (k) {
+  ["rows", "cols", "x", "y", "w", "h", "wr", "hr", "character", "rough", "fitArtboard", "overwrite"].forEach(function (k) {
     $(k).addEventListener("input", saveForm);
     $(k).addEventListener("change", saveForm);
   });
@@ -283,7 +283,6 @@
     (function next(i) {
       if (i >= jobs.length) {
         busy(false);
-        $("overwrite").checked = false;  // うっかり続けて上書きしないように、作り終わったら外す
         setStatus(jobs.length === 1 ? (made[0] || "") : made.length + " / " + jobs.length + " 個の表を作りました。\n\n" + made.join("\n\n"));
         return;
       }
@@ -351,7 +350,7 @@
   function saveForm() {
     var f = {};
     ["rows", "cols", "x", "y", "w", "h", "wr", "hr"].forEach(function (k) { f[k] = $(k).value; });
-    ["character", "rough", "fitArtboard"].forEach(function (k) { f[k] = $(k).checked; });
+    ["character", "rough", "fitArtboard", "overwrite"].forEach(function (k) { f[k] = $(k).checked; });
     save("create", f);
   }
 

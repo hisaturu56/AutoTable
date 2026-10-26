@@ -387,7 +387,7 @@
         var fitCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを表にぴったり合わせる（ラフのはみ出しも含む）");
         fitCheck.value = CONFIG.defaultFitArtboard;
         var overwriteCheck = optPanel.add("checkbox", undefined, "同じ名前の表があれば作り直す（上書き。位置はそのまま。CSV なしは今のアートボード）");
-        overwriteCheck.value = false;
+        overwriteCheck.value = true;  // 初期値：同じ名前の表があれば作り直す
         optPanel.add("statictext", undefined, "※ PNG の書き出しは、パネルの「書き出し」（または 表の書き出し.jsx）で行います");
 
         var btns = dlg.add("group");
