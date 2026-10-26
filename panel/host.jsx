@@ -206,12 +206,114 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         }
         var boardList = [];
         for (var k = 0; k < doc.artboards.length; k++) boardList.push({ index: k, name: doc.artboards[k].name });
+        var empties = emptyCells(doc);
+        var emptyList = [];
+        for (var e = 0; e < empties.length; e++) {
+            emptyList.push({ id: e, board: artboardOfBox(doc, empties[e].box), name: "行" + empties[e].row + "（画像なし）", row: empties[e].row });
+        }
         return json({
             boards: boardList,
             images: images,
+            empties: emptyList,
             selected: selectedTarget(doc, targets),
             active: doc.artboards.getActiveArtboardIndex()
         });
+    }
+
+    // 画像の入っていないキャラ欄のマス（表を作るときに「なし」にしたところ）
+    //   テーブルレイヤーの「行N_キャラ」のマスで、同じ表の「キャラ画像」レイヤーに「行N_…」の画像がないもの
+    function emptyCells(doc) {
+        var list = [];
+        (function walk(container) {
+            var layers = container.layers;
+            var table = null, images = null;
+            for (var i = 0; i < layers.length; i++) {
+                if (layers[i].name === TABLE_LAYER) table = layers[i];
+                if (layers[i].name === IMAGE_LAYER) images = layers[i];
+            }
+            if (table) {
+                var has = {};
+                if (images) {
+                    for (var g = 0; g < images.groupItems.length; g++) {
+                        var m = /^行(\d+)_/.exec(images.groupItems[g].name);
+                        if (m) has[m[1]] = true;
+                    }
+                }
+                for (var c = 0; c < table.groupItems.length; c++) {
+                    var cell = table.groupItems[c];
+                    var r = /^行(\d+)_キャラ$/.exec(cell.name);
+                    if (!r || has[r[1]]) continue;
+                    var shape = cellShape(cell);
+                    if (!shape) continue;
+                    var b = shape.geometricBounds;
+                    list.push({ parent: container, row: parseInt(r[1], 10), box: { left: b[0], top: b[1], w: b[2] - b[0], h: b[1] - b[3] } });
+                }
+            }
+            for (var j = 0; j < layers.length; j++) {
+                if (layers[j].name !== TABLE_LAYER && layers[j].name !== IMAGE_LAYER) walk(layers[j]);
+            }
+        })(doc);
+        return list;
+    }
+
+    function artboardOfBox(doc, box) {
+        var cx = box.left + box.w / 2, cy = box.top - box.h / 2;
+        for (var i = 0; i < doc.artboards.length; i++) {
+            var r = doc.artboards[i].artboardRect;
+            if (cx >= r[0] && cx <= r[2] && cy <= r[1] && cy >= r[3]) return i;
+        }
+        return doc.artboards.getActiveArtboardIndex();
+    }
+
+    // 画像の入っていないキャラ欄に画像を入れる（表を作るときと同じ入れ方。1 行目はロゴとして切り抜かずに収める）
+    //   戻り値：入れた画像の名前（「行N_ファイル名」）。キャンセルなら null
+    function addImage(emptyId) {
+        var doc = activeDoc();
+        if (!doc) return json(null);
+        var cell = emptyCells(doc)[emptyId];
+        if (!cell) return json(null);
+        var from = materialFolder(false);
+        var f = from ? from.openDlg("入れる画像を選ぶ（行" + cell.row + "）", IMAGE_FILTER, false)
+                     : File.openDialog("入れる画像を選ぶ（行" + cell.row + "）", IMAGE_FILTER, false);
+        if (!f) return json(null);
+
+        // 同じ表の「キャラ画像」レイヤー（なければ作って、表の中のいちばん上へ）
+        var layer = null;
+        try { layer = cell.parent.layers.getByName(IMAGE_LAYER); } catch (e) { layer = null; }
+        if (!layer) {
+            layer = cell.parent.layers.add();
+            layer.name = IMAGE_LAYER;
+            layer.zOrder(ZOrderMethod.BRINGTOFRONT);
+        }
+        var g = layer.groupItems.add();
+        // 行の番号の順に並ぶように、自分より後ろの行の画像のすぐ上に置く
+        for (var i = 0; i < layer.groupItems.length; i++) {
+            var other = layer.groupItems[i];
+            var m = /^行(\d+)_/.exec(other.name);
+            if (other !== g && m && parseInt(m[1], 10) > cell.row) {
+                g.move(other, ElementPlacement.PLACEBEFORE);
+                break;
+            }
+            if (i === layer.groupItems.length - 1) g.move(layer, ElementPlacement.PLACEATEND);
+        }
+        g.name = "行" + cell.row + "_" + decodeURI(f.name).replace(/\.[^.]+$/, "");
+        var img = g.placedItems.add();
+        img.file = f;
+        var b = cell.box;
+        if (cell.row === 1) {
+            var pad = 15;  // ロゴの余白（ポロライドテーブル自動作成の image.logoPadding と同じ）
+            var s = Math.min((b.w - pad * 2) / img.width, (b.h - pad * 2) / img.height) * 100;
+            img.resize(s, s);
+            img.position = [b.left + (b.w - img.width) / 2, b.top - (b.h - img.height) / 2];
+        } else {
+            var scale = Math.max(b.w / img.width, b.h / img.height) * 100;
+            img.resize(scale, scale);
+            img.position = [b.left + (b.w - img.width) / 2, b.top];  // 上ぞろえ
+            g.pathItems.rectangle(b.top, b.left, b.w, b.h);       // グループのいちばん上のパスで切り抜く
+            g.clipped = true;
+        }
+        app.redraw();
+        return json({ name: g.name, logo: cell.row === 1 });
     }
 
     // 画像の今の値（拡大率・横・縦）と、スライダーの範囲
@@ -479,6 +581,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         docNames: docNames,
         getTextSize: getTextSize,
         fixRough: fixRough,
+        addImage: addImage,
         setTextSize: setTextSize,
         createTable: createTable,
         listImages: listImages,

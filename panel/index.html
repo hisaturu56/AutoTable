@@ -101,15 +101,6 @@
       </div>
     </fieldset>
 
-    <fieldset>
-      <legend>サイズ</legend>
-      <div class="row">
-        <label class="k">行数</label><input type="number" id="rows" min="1">
-        <label>列数</label><input type="number" id="cols" min="1">
-      </div>
-      <label class="c"><input type="checkbox" id="character">左端にキャラ欄（正方形）を入れる</label>
-      <div class="note">CSV を使わないときの設定です（列数はキャラ欄を除く）</div>
-    </fieldset>
 
     <fieldset>
       <legend>表全体（下地）の位置と大きさ（px・中心）</legend>
@@ -168,6 +159,7 @@
       </div>
       <button id="imgCopy" class="wide">同じ表の画像を全部この画像と同じにする</button>
       <button id="imgReplace" class="wide">画像を差し替える…</button>
+      <button id="imgAdd" class="wide main" style="display:none">画像を入れる…</button>
       <div class="note">Illustrator で画像をクリックしてからパネルに戻ると、その画像に切り替わります</div>
     </fieldset>
     <div class="note">元に戻すときは Ctrl+Z</div>
@@ -272,12 +264,12 @@
     $("wr").add(new Option(RATIOS[r].label, r));
     $("hr").add(new Option(RATIOS[r].label, r));
   }
-  ["rows", "cols", "x", "y", "w", "h", "wr", "hr"].forEach(function (k) { $(k).value = form[k]; });
-  ["character", "rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) { $(k).checked = !!form[k]; });
+  ["x", "y", "w", "h", "wr", "hr"].forEach(function (k) { $(k).value = form[k]; });
+  ["rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) { $(k).checked = !!form[k]; });
   updateCSV();
   updateSize();
 
-  ["rows", "cols", "x", "y", "w", "h", "wr", "hr", "character", "rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) {
+  ["x", "y", "w", "h", "wr", "hr", "rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) {
     $(k).addEventListener("input", saveForm);
     $(k).addEventListener("change", saveForm);
   });
@@ -311,7 +303,6 @@
     var w = parseFloat($("w").value) * RATIOS[$("wr").value].value;
     var h = parseFloat($("h").value) * RATIOS[$("hr").value].value;
     var base = {
-      rows: $("rows").value, cols: $("cols").value,
       x: $("x").value, y: $("y").value, w: w, h: h,
       rough: $("rough").checked, fixRough: $("fixRough").checked, fitArtboard: $("fitArtboard").checked,
       overwrite: $("overwrite").checked
@@ -324,7 +315,8 @@
       });
       if (!jobs.length) { setStatus(notionTables.length ? "作る表にチェックを入れてください。" : "Notion から読んだ表がありません。"); return; }
     } else if (!csvs.length) {
-      jobs.push({ name: "表", csvPath: "", character: $("character").checked });
+      setStatus("「CSV を追加…」で CSV を選んでください。");
+      return;
     } else {
       csvs.forEach(function (c) { if (c.checked) jobs.push({ name: c.name, csvPath: c.path, character: c.character }); });
       if (!jobs.length) { setStatus("作る CSV にチェックを入れてください。"); return; }
@@ -364,9 +356,8 @@
 
   // CSV の一覧を表示する（作る・キャラ欄のチェック、× で一覧から外す）
   function updateCSV() {
-    renderList($("csvList"), csvs, "（CSV を追加しないと空の表を作ります）", function () { save("csvs", csvs); },
+    renderList($("csvList"), csvs, "（「CSV を追加…」で CSV を選んでください）", function () { save("csvs", csvs); },
                function (i) { csvs.splice(i, 1); updateCSV(); });
-    updateSizeInputs();
     save("csvs", csvs);
   }
 
@@ -407,10 +398,6 @@
     });
   }
 
-  // 行数・列数・キャラ欄は、CSV を使わずに空の表を作るときだけ
-  function updateSizeInputs() {
-    $("rows").disabled = $("cols").disabled = $("character").disabled = source === "notion" || csvs.length > 0;
-  }
 
   // ---------------- Notion ----------------
 
@@ -427,7 +414,6 @@
     for (var i = 0; i < radios.length; i++) radios[i].checked = radios[i].value === s;
     $("notionBox").style.display = s === "notion" ? "" : "none";
     $("csvBox").style.display = s === "csv" ? "" : "none";
-    updateSizeInputs();
     if (s === "notion" && scripts === null) notionLoad(false);
   }
   var radios = document.querySelectorAll("input[name=source]");
@@ -563,8 +549,8 @@
 
   function saveForm() {
     var f = {};
-    ["rows", "cols", "x", "y", "w", "h", "wr", "hr"].forEach(function (k) { f[k] = $(k).value; });
-    ["character", "rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) { f[k] = $(k).checked; });
+    ["x", "y", "w", "h", "wr", "hr"].forEach(function (k) { f[k] = $(k).value; });
+    ["rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) { f[k] = $(k).checked; });
     save("create", f);
   }
 
@@ -660,8 +646,10 @@
     var img = findImage(id);
     if (!img) return;
     imageId = id;
+    emptyId = -1;
     if (img.board !== currentBoard) setBoard(img.board);
     $("image").value = id;
+    setImageControls("image");
     if (selectInIllustrator) call("PT.selectImage(" + id + ")");
     call("PT.getImage(" + id + ")", showValues);
   }
@@ -672,15 +660,45 @@
     imageData.images.forEach(function (img) {
       if (img.board === board) list.add(new Option(img.name, img.id));
     });
+    // 画像を入れなかったキャラ欄（あとから「画像を入れる…」で入れられる）
+    (imageData.empties || []).forEach(function (e) {
+      if (e.board === board) list.add(new Option(e.name, "e" + e.id));
+    });
     var has = list.options.length > 0;
-    var controls = $("imageBox").querySelectorAll("select, input, button");
-    for (var i = 0; i < controls.length; i++) {
-      if (controls[i].id !== "imgFromSel") controls[i].disabled = !has;
-    }
     if (!has) {
       imageId = -1;
-      list.add(new Option("（この表にキャラ画像はありません）", -1));
+      list.add(new Option("（この表にキャラ欄はありません）", -1));
     }
+    setImageControls(has && imageId >= 0 ? "image" : has ? "empty" : "none");
+    if (imageId < 0 && has) {  // 画像がまだない表なら、最初の画像なしのマスを選んでおく
+      var first = list.options[0].value;
+      if (String(first).charAt(0) === "e") selectEmpty(parseInt(first.slice(1), 10));
+    }
+  }
+
+  // 画像の操作の使える・使えない。mode：image（画像を選んでいる）／empty（画像なしのマス）／none（キャラ欄なし）
+  function setImageControls(mode) {
+    var controls = $("imageBox").querySelectorAll("input, button");
+    for (var i = 0; i < controls.length; i++) {
+      if (controls[i].id !== "imgFromSel" && controls[i].id !== "imgAdd") controls[i].disabled = mode !== "image";
+    }
+    $("image").disabled = mode === "none";
+    $("imgAdd").style.display = mode === "empty" ? "" : "none";
+  }
+
+  function findEmpty(id) {
+    var list = imageData.empties || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+
+  // 画像なしのマスを選ぶ（「画像を入れる…」だけ使える）
+  var emptyId = -1;
+  function selectEmpty(id) {
+    imageId = -1;
+    emptyId = id;
+    $("image").value = "e" + id;
+    setImageControls("empty");
   }
 
   $("board").addEventListener("change", function () {
@@ -689,8 +707,34 @@
     var first = null;
     imageData.images.forEach(function (img) { if (first === null && img.board === board) first = img.id; });
     if (first !== null) selectImage(first, true);
+    else {
+      var e = null;
+      (imageData.empties || []).forEach(function (x) { if (e === null && x.board === board) e = x.id; });
+      if (e !== null) selectEmpty(e);
+    }
   });
-  $("image").addEventListener("change", function () { selectImage(parseInt(this.value, 10), true); });
+  $("image").addEventListener("change", function () {
+    if (String(this.value).charAt(0) === "e") selectEmpty(parseInt(this.value.slice(1), 10));
+    else selectImage(parseInt(this.value, 10), true);
+  });
+  // 画像なしのキャラ欄に画像を入れる
+  $("imgAdd").addEventListener("click", function () {
+    if (emptyId < 0) return;
+    call("PT.addImage(" + emptyId + ")", function (r) {
+      if (!r) return;
+      setStatus("画像を入れました：" + r.name + (r.logo ? "（1 行目なので、切り抜かずにマスに収めました）" : ""));
+      var board = currentBoard;
+      call("PT.listImages()", function (data) {
+        if (!data) return;
+        imageData = data;
+        var id = -1;
+        data.images.forEach(function (img) { if (img.board === board && img.name === r.name) id = img.id; });
+        currentBoard = -1;
+        if (id >= 0) selectImage(id, true);
+        else setBoard(board);
+      });
+    });
+  });
   $("imgFromSel").addEventListener("click", function () { loadImages(true); });
   $("imgReload").addEventListener("click", function () { loadImages(false); });
 
