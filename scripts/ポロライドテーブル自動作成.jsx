@@ -91,7 +91,9 @@
         exportFolderName: "素材"        // Illustrator ファイルと同じ場所にあるこの名前のフォルダ。キャラ画像をここから探し、PNG もここへ保存（なければ作る）
     };
 
-    var opts = showDialog();
+    // パネルから呼ばれたときは、パネルの設定を使う（ダイアログは出さない）
+    var panelMode = !!$.global.PT_CREATE_OPTIONS;
+    var opts = panelMode ? panelOptions($.global.PT_CREATE_OPTIONS) : showDialog();
     if (!opts) return;
 
     var data = null;
@@ -261,7 +263,8 @@
     if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
     if (missingImages.length) msg += "\n\n※見つからなかった画像：\n" + missingImages.join("\n");
     if (roughFailed) msg += "\n\n※ラフ効果を適用できませんでした。効果メニューから手動で適用してください。";
-    alert(msg);
+    if (panelMode) $.global.PT_RESULT = msg;  // パネルに表示する
+    else alert(msg);
 
     // ================================================================
 
@@ -424,6 +427,40 @@
             rough: roughCheck.value,
             fitArtboard: fitCheck.value,
             exportPNG: exportCheck.value
+        };
+    }
+
+    // パネルの設定（x・y・w・h は割合をかけたあとの大きさ）を、ダイアログと同じ形にする
+    function panelOptions(p) {
+        var csvFile = p.csvPath ? new File(p.csvPath) : null;
+        if (csvFile && !csvFile.exists) {
+            alert("CSV が見つかりません：\n" + p.csvPath);
+            return null;
+        }
+        var rows = parseInt(p.rows, 10), cols = parseInt(p.cols, 10);
+        if (!csvFile && (!(rows >= 1) || !(cols >= 1))) {
+            alert("行数・列数には1以上の整数を入力してください。");
+            return null;
+        }
+        var layout = { x: parseFloat(p.x), y: parseFloat(p.y), w: parseFloat(p.w), h: parseFloat(p.h) };
+        if (isNaN(layout.x) || isNaN(layout.y) || !(layout.w > 0) || !(layout.h > 0)) {
+            alert("位置と大きさには数値を入力してください（幅・高さは 0 より大きい値）。");
+            return null;
+        }
+        var minW = CONFIG.margin * 2, minH = CONFIG.margin * 3 + CONFIG.headerHeight;
+        if (layout.w <= minW || layout.h <= minH) {
+            alert("表が小さすぎます。幅は " + minW + " px、高さは " + minH + " px より大きくしてください。");
+            return null;
+        }
+        return {
+            layout: layout,
+            csvFile: csvFile,
+            rows: rows,
+            cols: cols,
+            character: !!p.character,
+            rough: !!p.rough,
+            fitArtboard: !!p.fitArtboard,
+            exportPNG: !!p.exportPNG
         };
     }
 

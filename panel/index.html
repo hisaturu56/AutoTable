@@ -4,68 +4,510 @@
 <meta charset="UTF-8">
 <title>ポロライドテーブル自動作成</title>
 <style>
-  :root { --bg: #323232; --fg: #e0e0e0; --btn: #454545; --btn-hover: #555555; --line: #5a5a5a; --note: #a0a0a0; }
-  body { margin: 0; padding: 10px; background: var(--bg); color: var(--fg);
+  :root { --bg: #323232; --fg: #e0e0e0; --field: #262626; --btn: #454545; --btn-hover: #555555;
+          --line: #5a5a5a; --note: #a0a0a0; --accent: #4b8ad8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 10px 10px; background: var(--bg); color: var(--fg);
          font-family: "Yu Gothic UI", "Meiryo UI", sans-serif; font-size: 12px; }
-  button { display: block; width: 100%; margin: 0 0 8px; padding: 9px 6px; border: 1px solid var(--line);
-           border-radius: 3px; background: var(--btn); color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; }
+  .tabs { position: sticky; top: 0; display: flex; gap: 4px; padding: 8px 0; background: var(--bg); z-index: 1; }
+  .tabs button { flex: 1; margin: 0; padding: 7px 4px; border-radius: 3px 3px 0 0; }
+  .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  section { display: none; }
+  section.on { display: block; }
+  fieldset { min-width: 0; margin: 0 0 8px; padding: 6px 8px 8px; border: 1px solid var(--line); border-radius: 3px; }
+  legend { padding: 0 4px; color: var(--note); }
+  .row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+  .row label.k { flex: 0 0 76px; }
+  input[type=text], input[type=number], select { min-width: 0; padding: 3px 4px; border: 1px solid var(--line);
+         border-radius: 2px; background: var(--field); color: var(--fg); font: inherit; }
+  input[type=number] { width: 64px; }
+  select { flex: 1; }
+  input[type=range] { flex: 1; min-width: 60px; }
+  label.c { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
+  button { margin: 0 0 6px; padding: 6px; border: 1px solid var(--line); border-radius: 3px;
+           background: var(--btn); color: var(--fg); font: inherit; cursor: pointer; }
   button:hover { background: var(--btn-hover); }
   button:disabled { opacity: 0.5; cursor: default; }
+  button.wide { display: block; width: 100%; }
+  button.main { padding: 9px; font-size: 13px; background: var(--accent); border-color: var(--accent); color: #fff; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6px; }
   .note { color: var(--note); font-size: 11px; line-height: 1.5; }
-  #status { min-height: 1.5em; }
+  .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #status { min-height: 1.5em; white-space: pre-wrap; word-break: break-all; }
+  #boards label.c { word-break: break-all; }
 </style>
 </head>
 <body>
-  <button data-script="create_table.jsx">表を作る</button>
-  <button data-script="adjust_images.jsx">キャラ画像の調整</button>
-  <button data-script="export_png.jsx">PNG で書き出す</button>
-  <div class="note">アートボードが複数あるときは、どれを書き出すか選べます</div>
+  <div class="tabs">
+    <button data-tab="create" class="on">表を作る</button>
+    <button data-tab="images">画像調整</button>
+    <button data-tab="export">書き出し</button>
+  </div>
+
+  <!-- ================= 表を作る ================= -->
+  <section id="create" class="on">
+    <fieldset>
+      <legend>データ</legend>
+      <div class="row"><span id="csvName" class="name note">（CSV を選ばないと空の表を作ります）</span></div>
+      <div class="row">
+        <button id="csvPick">CSV を選ぶ…</button>
+        <button id="csvClear">クリア</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>サイズ</legend>
+      <div class="row">
+        <label class="k">行数</label><input type="number" id="rows" min="1">
+        <label>列数</label><input type="number" id="cols" min="1">
+      </div>
+      <div class="note">行数・列数は CSV を使わないとき（列数はキャラ欄を除く）</div>
+      <label class="c"><input type="checkbox" id="character">左端にキャラ欄（正方形）を入れる</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>表全体（下地）の位置と大きさ（px・中心）</legend>
+      <div class="row">
+        <label class="k">X</label><input type="number" id="x" step="any">
+        <label>Y</label><input type="number" id="y" step="any">
+      </div>
+      <div class="row">
+        <label class="k">幅</label><input type="number" id="w" step="any">
+        <label>高さ</label><input type="number" id="h" step="any">
+      </div>
+      <div class="row"><label class="k">幅の割合</label><select id="wr"></select></div>
+      <div class="row"><label class="k">高さの割合</label><select id="hr"></select></div>
+      <div class="row"><span id="sizeNote" class="note"></span></div>
+      <button id="layoutReset">初期値に戻す</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>オプション</legend>
+      <label class="c"><input type="checkbox" id="rough">ラフ効果をかける</label>
+      <label class="c"><input type="checkbox" id="fitArtboard">アートボードを表にぴったり合わせる</label>
+      <label class="c"><input type="checkbox" id="exportPNG">作成後すぐ PNG で書き出す</label>
+      <div class="note">キャラ欄がある表は、画像を調整してから「書き出し」タブで書き出します</div>
+    </fieldset>
+
+    <button id="createBtn" class="wide main">表を作る</button>
+  </section>
+
+  <!-- ================= 画像調整 ================= -->
+  <section id="images">
+    <div class="row"><label class="k">アートボード</label><select id="board"></select></div>
+    <div class="row"><label class="k">画像</label><select id="image"></select></div>
+    <div class="grid2">
+      <button id="imgFromSel">選択中の画像にする</button>
+      <button id="imgReload">一覧を更新</button>
+    </div>
+
+    <fieldset>
+      <legend>拡大率と位置</legend>
+      <div class="row"><label class="k">拡大率 %</label><input type="range" id="zoomR" min="100" max="400" step="1"><input type="number" id="zoomN" step="any"></div>
+      <div class="row"><label class="k">横 px</label><input type="range" id="xR" step="1"><input type="number" id="xN" step="any"></div>
+      <div class="row"><label class="k">縦 px</label><input type="range" id="yR" step="1"><input type="number" id="yN" step="any"></div>
+      <div class="note">100% ＝ マスにちょうど入る大きさ。横は右、縦は下がプラス</div>
+    </fieldset>
+
+    <div class="grid2">
+      <button id="imgFit">マスに合わせる</button>
+      <button id="imgTop">上ぞろえ</button>
+    </div>
+    <button id="imgCopy" class="wide">同じ表の画像を全部この画像と同じにする</button>
+    <button id="imgReplace" class="wide">画像を差し替える…</button>
+    <div class="note">Illustrator で画像をクリックしてからパネルに戻ると、その画像に切り替わります。元に戻すときは Ctrl+Z</div>
+  </section>
+
+  <!-- ================= 書き出し ================= -->
+  <section id="export">
+    <fieldset>
+      <legend>書き出すアートボード</legend>
+      <div id="boards"></div>
+    </fieldset>
+    <div class="grid2">
+      <button id="boardsAll">全部選ぶ</button>
+      <button id="boardsNone">全部外す</button>
+    </div>
+    <button id="boardsReload" class="wide">一覧を更新</button>
+    <button id="exportBtn" class="wide main">PNG で書き出す</button>
+    <div class="note">Illustrator ファイルと同じ場所の「素材」フォルダへ、アートボード名のファイル名で保存します</div>
+  </section>
+
   <div id="status" class="note"></div>
 
 <script>
-  // パネルのボタンから、jsx フォルダのスクリプト（今までと同じもの）を Illustrator で実行する
+(function () {
   var cep = window.__adobe_cep__;
+  var $ = function (id) { return document.getElementById(id); };
 
-  // Illustrator の明るさ設定に合わせて背景色を変える
-  try {
-    var skin = JSON.parse(cep.getHostEnvironment()).appSkinInfo.panelBackgroundColor.color;
-    var bg = "rgb(" + Math.round(skin.red) + "," + Math.round(skin.green) + "," + Math.round(skin.blue) + ")";
-    document.documentElement.style.setProperty("--bg", bg);
-    if (skin.red > 128) {
-      document.documentElement.style.setProperty("--fg", "#222222");
-      document.documentElement.style.setProperty("--btn", "#e8e8e8");
-      document.documentElement.style.setProperty("--btn-hover", "#f5f5f5");
-      document.documentElement.style.setProperty("--line", "#b0b0b0");
-      document.documentElement.style.setProperty("--note", "#555555");
-    }
-  } catch (e) {}
+  var DEFAULTS = { rows: 6, cols: 5, character: true, x: 960, y: 540, w: 1505, h: 592.5, wr: 0, hr: 0,
+                   rough: true, fitArtboard: true, exportPNG: false };
+  var RATIOS = [
+    { label: "100%（そのまま）", value: 1 },
+    { label: "67%（3分の2）", value: 2 / 3 },
+    { label: "50%（半分）", value: 1 / 2 },
+    { label: "33%（3分の1）", value: 1 / 3 }
+  ];
+
+  applySkin();
+
+  // ---------------- Illustrator との通信 ----------------
 
   // このパネルのフォルダ（index.html のある場所）
-  function extensionFolder() {
+  var folder = (function () {
     var path = decodeURI(location.href.replace(/[?#].*$/, "").replace(/\/[^\/]*$/, ""));
     return path.replace(/^file:\/\/\/(?=[A-Za-z]:)/, "").replace(/^file:\/\//, "");
-  }
+  })();
 
-  var status = document.getElementById("status");
-  var buttons = document.querySelectorAll("button[data-script]");
-  for (var i = 0; i < buttons.length; i++) {
-    buttons[i].addEventListener("click", function () {
-      if (!cep) { status.textContent = "Illustrator の中で開いてください。"; return; }
-      var file = extensionFolder() + "/jsx/" + this.getAttribute("data-script");
-      var script = 'try { $.evalFile(new File(' + JSON.stringify(file) + ')); "ok"; }'
-                 + ' catch (e) { "エラー：" + e.message + "（" + e.line + " 行目）"; }';
-      setBusy(true);
-      cep.evalScript(script, function (result) {
-        setBusy(false);
-        status.textContent = result && result !== "ok" && result !== "undefined" ? result : "";
-      });
+  // host.jsx の関数を呼ぶ。結果（JSON）をオブジェクトにして返す
+  function call(expr, done) {
+    if (!cep) { setStatus("Illustrator の中で開いてください。"); return; }
+    var script = 'try { if (typeof PT === "undefined") $.evalFile(new File(' + JSON.stringify(folder + "/host.jsx") + ')); '
+               + expr + '; } catch (e) { "ERROR:" + e.message + "（" + e.line + " 行目）"; }';
+    cep.evalScript(script, function (result) {
+      if (typeof result === "string" && result.indexOf("ERROR:") === 0) {
+        setStatus("エラー：" + result.slice(6));
+        if (done) done(null);
+        return;
+      }
+      var value = null;
+      try { value = JSON.parse(result); } catch (e) { value = null; }
+      if (done) done(value);
     });
   }
 
-  function setBusy(busy) {
-    for (var i = 0; i < buttons.length; i++) buttons[i].disabled = busy;
-    status.textContent = busy ? "実行中…（開いた画面を閉じると戻ります）" : status.textContent;
+  function arg(v) { return JSON.stringify(v); }
+
+  function setStatus(text) { $("status").textContent = text || ""; }
+
+  // ---------------- タブ ----------------
+
+  var tabButtons = document.querySelectorAll(".tabs button");
+  for (var i = 0; i < tabButtons.length; i++) {
+    tabButtons[i].addEventListener("click", function () { showTab(this.getAttribute("data-tab")); });
   }
+  var currentTab = "create";
+  function showTab(name) {
+    currentTab = name;
+    for (var i = 0; i < tabButtons.length; i++) {
+      tabButtons[i].classList.toggle("on", tabButtons[i].getAttribute("data-tab") === name);
+    }
+    var sections = document.querySelectorAll("section");
+    for (var j = 0; j < sections.length; j++) sections[j].classList.toggle("on", sections[j].id === name);
+    setStatus("");
+    if (name === "images") loadImages(true);
+    if (name === "export") loadArtboards();
+    save("tab", name);
+  }
+
+  // ---------------- 表を作る ----------------
+
+  var form = load("create", DEFAULTS);
+  var csv = load("csv", null);  // { path, name, hasImages }
+
+  for (var r = 0; r < RATIOS.length; r++) {
+    $("wr").add(new Option(RATIOS[r].label, r));
+    $("hr").add(new Option(RATIOS[r].label, r));
+  }
+  ["rows", "cols", "x", "y", "w", "h", "wr", "hr"].forEach(function (k) { $(k).value = form[k]; });
+  ["character", "rough", "fitArtboard", "exportPNG"].forEach(function (k) { $(k).checked = !!form[k]; });
+  updateCSV();
+  updateSize();
+
+  ["rows", "cols", "x", "y", "w", "h", "wr", "hr", "character", "rough", "fitArtboard", "exportPNG"].forEach(function (k) {
+    $(k).addEventListener("input", saveForm);
+    $(k).addEventListener("change", saveForm);
+  });
+  ["w", "h", "wr", "hr"].forEach(function (k) {
+    $(k).addEventListener("input", updateSize);
+    $(k).addEventListener("change", updateSize);
+  });
+  // キャラ欄がない表はすぐ書き出し、ある表は調整が終わってから書き出す（初期値。チェックで変えられる）
+  $("character").addEventListener("change", function () {
+    $("exportPNG").checked = !$("character").checked;
+    saveForm();
+  });
+
+  $("csvPick").addEventListener("click", function () {
+    call("PT.pickCSV()", function (f) {
+      if (!f) return;
+      csv = f;
+      $("character").checked = f.hasImages;
+      $("exportPNG").checked = !f.hasImages;
+      save("csv", csv);
+      updateCSV();
+      saveForm();
+    });
+  });
+  $("csvClear").addEventListener("click", function () {
+    csv = null;
+    save("csv", null);
+    updateCSV();
+  });
+  $("layoutReset").addEventListener("click", function () {
+    ["x", "y", "w", "h", "wr", "hr"].forEach(function (k) { $(k).value = DEFAULTS[k]; });
+    updateSize();
+    saveForm();
+  });
+
+  $("createBtn").addEventListener("click", function () {
+    var w = parseFloat($("w").value) * RATIOS[$("wr").value].value;
+    var h = parseFloat($("h").value) * RATIOS[$("hr").value].value;
+    var options = {
+      csvPath: csv ? csv.path : "",
+      rows: $("rows").value, cols: $("cols").value,
+      character: $("character").checked,
+      x: $("x").value, y: $("y").value, w: w, h: h,
+      rough: $("rough").checked, fitArtboard: $("fitArtboard").checked, exportPNG: $("exportPNG").checked
+    };
+    busy(true, "表を作っています…");
+    call("PT.createTable(" + arg(folder + "/jsx/create_table.jsx") + ", " + arg(options) + ")", function (res) {
+      busy(false);
+      if (res && res.message) setStatus(res.message);
+    });
+  });
+
+  function updateCSV() {
+    $("csvName").textContent = csv ? csv.name : "（CSV を選ばないと空の表を作ります）";
+    $("rows").disabled = !!csv;
+    $("cols").disabled = !!csv;
+  }
+
+  function updateSize() {
+    var w = parseFloat($("w").value) * RATIOS[$("wr").value || 0].value;
+    var h = parseFloat($("h").value) * RATIOS[$("hr").value || 0].value;
+    $("sizeNote").textContent = isNaN(w) || isNaN(h) ? "幅・高さに数値を入れてください"
+                                                    : "→ 作る大きさ：幅 " + round(w) + " × 高さ " + round(h) + " px";
+  }
+
+  function saveForm() {
+    var f = {};
+    ["rows", "cols", "x", "y", "w", "h", "wr", "hr"].forEach(function (k) { f[k] = $(k).value; });
+    ["character", "rough", "fitArtboard", "exportPNG"].forEach(function (k) { f[k] = $(k).checked; });
+    save("create", f);
+  }
+
+  // ---------------- 画像調整 ----------------
+
+  var imageData = { boards: [], images: [] };
+  var imageId = -1;
+
+  // 一覧を読み直す。preferSelection なら Illustrator で選択中の画像を選ぶ
+  function loadImages(preferSelection) {
+    call("PT.listImages()", function (data) {
+      if (!data) return;
+      imageData = data;
+      var board = $("board");
+      board.innerHTML = "";
+      data.boards.forEach(function (b) { board.add(new Option((b.index + 1) + "：" + b.name, b.index)); });
+      if (!data.images.length) {
+        $("image").innerHTML = "";
+        imageId = -1;
+        setStatus("「キャラ画像」レイヤーに、切り抜いたキャラ画像が見つかりません。");
+        return;
+      }
+      var id = preferSelection && data.selected >= 0 ? data.selected : findImage(imageId) ? imageId : -1;
+      if (id < 0) {
+        for (var i = 0; i < data.images.length && id < 0; i++) if (data.images[i].board === data.active) id = data.images[i].id;
+      }
+      if (id < 0) id = data.images[0].id;
+      selectImage(id, false);
+    });
+  }
+
+  function findImage(id) {
+    for (var i = 0; i < imageData.images.length; i++) if (imageData.images[i].id === id) return imageData.images[i];
+    return null;
+  }
+
+  // 画像を選ぶ（アートボードと画像の一覧も合わせる）。selectInIllustrator なら Illustrator でも選択する
+  function selectImage(id, selectInIllustrator) {
+    var img = findImage(id);
+    if (!img) return;
+    imageId = id;
+    $("board").value = img.board;
+    fillImageList(img.board);
+    $("image").value = id;
+    if (selectInIllustrator) call("PT.selectImage(" + id + ")");
+    call("PT.getImage(" + id + ")", showValues);
+  }
+
+  function fillImageList(board) {
+    var list = $("image");
+    list.innerHTML = "";
+    imageData.images.forEach(function (img) {
+      if (img.board === board) list.add(new Option(img.name, img.id));
+    });
+  }
+
+  $("board").addEventListener("change", function () {
+    var board = parseInt(this.value, 10);
+    var first = null;
+    imageData.images.forEach(function (img) { if (first === null && img.board === board) first = img.id; });
+    if (first !== null) selectImage(first, true);
+  });
+  $("image").addEventListener("change", function () { selectImage(parseInt(this.value, 10), true); });
+  $("imgFromSel").addEventListener("click", function () { loadImages(true); });
+  $("imgReload").addEventListener("click", function () { loadImages(false); });
+
+  // Illustrator で画像を選んでからパネルに戻ったら、その画像に切り替える
+  window.addEventListener("focus", function () {
+    if (currentTab !== "images") return;
+    call("PT.listImages()", function (data) {
+      if (data && data.selected >= 0 && data.selected !== imageId) loadImages(true);
+    });
+  });
+
+  function showValues(v) {
+    if (!v) return;
+    $("xR").min = $("yR").min = -v.range;
+    $("xR").max = $("yR").max = v.range;
+    if (!dragging) {
+      $("zoomR").value = v.zoom;
+      $("xR").value = v.x;
+      $("yR").value = v.y;
+    }
+    $("zoomN").value = round(v.zoom);
+    $("xN").value = round(v.x);
+    $("yN").value = round(v.y);
+  }
+
+  // スライダー：動かしている間は、前の反映が終わってから最新の値だけを送る
+  var dragging = false, sending = false, pending = null;
+  function sendValues(zoom, x, y) {
+    if (imageId < 0) return;
+    if (sending) { pending = [zoom, x, y]; return; }
+    sending = true;
+    call("PT.setImage(" + imageId + ", " + arg(zoom) + ", " + arg(x) + ", " + arg(y) + ")", function (v) {
+      sending = false;
+      showValues(v);
+      if (pending) { var p = pending; pending = null; sendValues(p[0], p[1], p[2]); }
+    });
+  }
+  [["zoomR", 0], ["xR", 1], ["yR", 2]].forEach(function (s) {
+    var el = $(s[0]);
+    el.addEventListener("input", function () {
+      dragging = true;
+      var v = [null, null, null];
+      v[s[1]] = parseFloat(el.value);
+      sendValues(v[0], v[1], v[2]);
+    });
+    el.addEventListener("change", function () { dragging = false; });
+  });
+  [["zoomN", 0], ["xN", 1], ["yN", 2]].forEach(function (s) {
+    $(s[0]).addEventListener("change", function () {
+      var n = parseFloat(this.value);
+      if (isNaN(n)) return;
+      var v = [null, null, null];
+      v[s[1]] = n;
+      sendValues(v[0], v[1], v[2]);
+    });
+  });
+
+  $("imgFit").addEventListener("click", function () { if (imageId >= 0) call("PT.fitImage(" + imageId + ")", showValues); });
+  $("imgTop").addEventListener("click", function () { if (imageId >= 0) call("PT.topImage(" + imageId + ")", showValues); });
+  $("imgCopy").addEventListener("click", function () {
+    if (imageId < 0) return;
+    call("PT.copyToTable(" + imageId + ")", function (r) {
+      setStatus(r && r.count ? "同じ表の " + r.count + " 枚を、この画像と同じにしました。" : "同じ表に、ほかのキャラ画像がありません。");
+    });
+  });
+  $("imgReplace").addEventListener("click", function () {
+    if (imageId < 0) return;
+    call("PT.replaceImage(" + imageId + ")", function (r) {
+      if (!r) return;
+      var img = findImage(imageId);
+      if (img) img.name = r.name;
+      selectImage(imageId, false);
+      setStatus("画像を差し替えました：" + r.name);
+    });
+  });
+
+  // ---------------- 書き出し ----------------
+
+  function loadArtboards() {
+    call("PT.listArtboards()", function (data) {
+      if (!data) return;
+      var box = $("boards");
+      box.innerHTML = "";
+      data.artboards.forEach(function (a) {
+        var label = document.createElement("label");
+        label.className = "c";
+        var check = document.createElement("input");
+        check.type = "checkbox";
+        check.value = a.index;
+        check.checked = a.index === data.active;
+        label.appendChild(check);
+        label.appendChild(document.createTextNode((a.index + 1) + "：" + a.name));
+        box.appendChild(label);
+      });
+      if (!data.artboards.length) box.textContent = "ドキュメントが開いていません。";
+    });
+  }
+  function boardChecks() { return document.querySelectorAll("#boards input[type=checkbox]"); }
+  $("boardsAll").addEventListener("click", function () { var c = boardChecks(); for (var i = 0; i < c.length; i++) c[i].checked = true; });
+  $("boardsNone").addEventListener("click", function () { var c = boardChecks(); for (var i = 0; i < c.length; i++) c[i].checked = false; });
+  $("boardsReload").addEventListener("click", loadArtboards);
+  $("exportBtn").addEventListener("click", function () {
+    var c = boardChecks(), indexes = [];
+    for (var i = 0; i < c.length; i++) if (c[i].checked) indexes.push(parseInt(c[i].value, 10));
+    if (!indexes.length) { setStatus("書き出すアートボードにチェックを入れてください。"); return; }
+    busy(true, "書き出しています…");
+    call("PT.exportArtboards(" + arg(indexes) + ")", function (r) {
+      busy(false);
+      if (r) setStatus(r.files.length ? "PNG を " + r.files.length + " 枚書き出しました：\n" + r.files.join("\n") : "書き出しませんでした。");
+    });
+  });
+
+  // ---------------- 共通 ----------------
+
+  function busy(on, text) {
+    var all = document.querySelectorAll("button");
+    for (var i = 0; i < all.length; i++) all[i].disabled = on;
+    if (on) setStatus(text);
+    else if ($("status").textContent === text) setStatus("");
+  }
+
+  function round(n) { return Math.round(n * 10) / 10; }
+
+  // 設定はパネルを閉じても残るように保存する（保存できない環境でも動くように）
+  function load(key, fallback) {
+    try {
+      var v = localStorage.getItem("polaroidtable." + key);
+      if (v === null) return fallback;
+      var parsed = JSON.parse(v);
+      if (fallback && typeof fallback === "object" && parsed && typeof parsed === "object") {
+        for (var k in fallback) if (!(k in parsed)) parsed[k] = fallback[k];
+      }
+      return parsed;
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function save(key, value) {
+    try { localStorage.setItem("polaroidtable." + key, JSON.stringify(value)); } catch (e) {}
+  }
+
+  // Illustrator の明るさ設定に合わせて色を変える
+  function applySkin() {
+    try {
+      var c = JSON.parse(cep.getHostEnvironment()).appSkinInfo.panelBackgroundColor.color;
+      var root = document.documentElement.style;
+      root.setProperty("--bg", "rgb(" + Math.round(c.red) + "," + Math.round(c.green) + "," + Math.round(c.blue) + ")");
+      if (c.red > 128) {
+        root.setProperty("--fg", "#222222");
+        root.setProperty("--field", "#ffffff");
+        root.setProperty("--btn", "#e8e8e8");
+        root.setProperty("--btn-hover", "#f5f5f5");
+        root.setProperty("--line", "#b0b0b0");
+        root.setProperty("--note", "#555555");
+      }
+    } catch (e) {}
+  }
+
+  var lastTab = load("tab", "create");
+  if (lastTab !== "create") showTab(lastTab);
+})();
 </script>
 </body>
 </html>
