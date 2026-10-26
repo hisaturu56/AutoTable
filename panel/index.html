@@ -142,8 +142,13 @@
     </fieldset>
 
     <button id="imgBulk" class="wide">キャラ画像をまとめて入れる・変える…</button>
-    <button id="finishBtn" class="wide main">ラフをかけて仕上げる</button>
-    <div class="note">下地・ヘッダー・マスにラフをかけて、表ごとに 1 枚の画像にします（画面が軽くなる。見た目は書き出す PNG と同じ）。そのあとマスの形・色を変えるときは、作り直しで</div>
+    <fieldset>
+      <legend>仕上げ（チェックした表の下地・ヘッダー・マス）</legend>
+      <label class="c"><input type="checkbox" id="finRough">ラフをかける</label>
+      <label class="c"><input type="checkbox" id="finRaster">画像にする（土台をくっつけて 1 枚に。いちばん軽い）</label>
+      <button id="finishBtn" class="wide main">仕上げる</button>
+      <div class="note">キャラ画像と文字はそのまま（あとから直せます）。画像にした見た目は書き出す PNG と同じ。もう一度押すと、前の画像を消して作り直します。マスの形・色を変えるときは、作り直し（上書き）で</div>
+    </fieldset>
 
     <fieldset>
       <legend>文字の大きさ（チェックした表の文字すべて）</legend>
@@ -621,22 +626,30 @@
     })(0);
   }
 
-  // ---- ラフをかけて仕上げる ----
+  // ---- 仕上げ（ラフをかける・画像にする。チェックで選ぶ） ----
+  var finish = load("finish", { rough: true, raster: true });
+  $("finRough").checked = !!finish.rough;
+  $("finRaster").checked = !!finish.raster;
+  ["finRough", "finRaster"].forEach(function (id) {
+    $(id).addEventListener("change", function () { save("finish", { rough: $("finRough").checked, raster: $("finRaster").checked }); });
+  });
+
   $("finishBtn").addEventListener("click", function () {
-    busy(true, "ラフをかけて仕上げています…");
+    var rough = $("finRough").checked, raster = $("finRaster").checked;
+    if (!rough && !raster) { setStatus("「ラフをかける」か「画像にする」にチェックを入れてください。"); return; }
+    busy(true, "仕上げています…");
     eachBoard(function (board, done) {
-      setStatus("ラフをかけて仕上げています…（" + (board + 1) + "：" + boardName(board) + "）");
-      call("PT.finishTable(" + board + ")", done);
+      setStatus("仕上げています…（" + (board + 1) + "：" + boardName(board) + "）");
+      call("PT.finishTable(" + board + ", " + rough + ", " + raster + ")", done);
     }, function (results, boards) {
       busy(false);
-      var done = 0, already = [], none = [];
+      var done = 0, none = [];
       results.forEach(function (r, i) {
         if (r && r.done) done++;
-        else if (r && r.already) already.push(boardName(boards[i]));
         else none.push(boardName(boards[i]));
       });
-      setStatus(done + " 個の表を仕上げました。" + (already.length ? "\nもう仕上げてある表：" + already.join("、") : "")
-              + (none.length ? "\n表が見つからなかったアートボード：" + none.join("、") : ""));
+      var what = rough && raster ? "ラフをかけて画像にしました" : rough ? "ラフをかけました（固定）" : "画像にしました";
+      setStatus(done + " 個の表に" + what + "。" + (none.length ? "\n⚠ 表が見つからなかったアートボード：" + none.join("、") : ""));
       loadText();
     });
   });
@@ -779,14 +792,23 @@
 
   // チェックした表のキャラ欄に、画像をまとめて入れる・変える（表ごとに Illustrator の画面が順に出る）
   $("imgBulk").addEventListener("click", function () {
-    var placed = 0, removed = 0;
+    var placed = 0, removed = 0, noChar = [], canceled = [], same = [];
     eachBoard(function (board, done) {
       call("PT.bulkImages(" + board + ")", function (r) {
-        if (r && !r.none) { placed += r.placed; removed += r.removed; }
+        if (!r) canceled.push(boardName(board));
+        else if (r.none) noChar.push(boardName(board));
+        else if (!r.placed && !r.removed) same.push(boardName(board));
+        else { placed += r.placed; removed += r.removed; }
         done(r);
       });
-    }, function () {
-      setStatus("キャラ画像を " + placed + " 枚入れました" + (removed ? "（前の画像を " + removed + " 枚外しました）" : "") + "。");
+    }, function (results) {
+      var lines = [];
+      if (placed || removed) lines.push("キャラ画像を " + placed + " 枚入れました" + (removed ? "（前の画像を " + removed + " 枚外しました）" : "") + "。");
+      if (noChar.length) lines.push("⚠ キャラ欄がない表（画像を入れる場所がありません。キャラ欄ありで作り直してください）：" + noChar.join("、"));
+      if (canceled.length) lines.push("キャンセルした表：" + canceled.join("、"));
+      if (same.length) lines.push("変えなかった表：" + same.join("、"));
+      if (!lines.length) lines.push("変更はありませんでした。");
+      setStatus(lines.join("\n"));
       imageId = -1;
       loadImages(false);
     });

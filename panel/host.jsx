@@ -171,70 +171,105 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
     // ---- 仕上げ：ラフをかけて、土台を 1 枚の画像にする ----
 
     var FINISHED_NAME = "土台（画像）";
+    var ROUGH_NOTE = "ラフ";  // ラフをかけた形の note（二重にかけないように）
     var ROUGH_XML = '<LiveEffect name="Adobe Roughen"><Dict data="R asiz ' + ROUGH_SIZE + ' R size ' + ROUGH_SIZE
                   + ' R absoluteness 1 R dtal 100 R roundness 0 "/></LiveEffect>';  // ポロライドテーブル自動作成のラフと同じ設定
 
-    // アートボードの表の、下地・ヘッダー・マスの写しにラフをかけて、72 ppi の画像 1 枚にする（書き出す PNG と同じ解像度）
-    //   元の下地・ヘッダー・マスは隠して残す（マスの位置を、文字の大きさ・キャラ画像の調整に使うため）
-    //   画像は「下地」レイヤーのいちばん下に置く（文字・キャラ画像の下）
-    function finishTable(board) {
+    // アートボードの表の仕上げ。rough：下地・ヘッダー・マスにラフをかける／raster：土台を 72 ppi の画像 1 枚にする（くっつける）
+    //   ラフだけのとき：ラフを「アピアランスを分割」で固定する
+    //   画像にするとき：写しを画像にして（書き出す PNG と同じ解像度なので見た目は同じ）「下地」レイヤーのいちばん下に置き、
+    //     元の下地・ヘッダー・マスは隠して残す（マスの位置を、文字の大きさ・キャラ画像の調整に使うため）
+    //   もう画像にしてある表は、前の画像を消して元の形から作り直す
+    //   キャラ画像と文字には何もしない
+    function finishTable(board, rough, raster) {
         var doc = activeDoc();
         if (!doc || !doc.artboards[board]) return json(null);
         var t = tableOnArtboard(doc, board);
         if (!t) return json({ none: true });
-        for (var f = 0; f < t.outer.pageItems.length; f++) {
-            if (t.outer.pageItems[f].name === FINISHED_NAME) return json({ already: true });
+
+        // 前に画像にしてあれば、消して元の形を出す
+        var redone = false;
+        for (var f = t.outer.pageItems.length - 1; f >= 0; f--) {
+            if (t.outer.pageItems[f].name === FINISHED_NAME) { t.outer.pageItems[f].remove(); redone = true; }
+        }
+        if (redone) {
+            showShapes(t.outer);
+            showShapes(t.header);
+            for (var c = 0; c < t.table.groupItems.length; c++) {
+                var cs = cellShape(t.table.groupItems[c]);
+                if (cs) cs.hidden = false;
+            }
         }
 
-        // 写す順：下地 → ヘッダー → マス（あとのものほど上）
+        // 下地 → ヘッダー → マス の順（あとのものほど上）
         var items = [];
         collectShapes(t.outer, items);
         collectShapes(t.header, items);
         for (var g = 0; g < t.table.groupItems.length; g++) {
             var shape = cellShape(t.table.groupItems[g]);
-            if (shape && !shape.hidden) items.push(shape);
+            if (shape) items.push(shape);
         }
         if (!items.length) return json({ none: true });
 
-        var temp = t.outer.groupItems.add();
-        for (var i = 0; i < items.length; i++) {
-            var d = items[i].duplicate(temp, ElementPlacement.PLACEATBEGINNING);
-            // まだラフのない長方形（点が 4 つ）だけにラフをかける（前のバージョンでラフを固定した形にはかけない）
-            if (d.typename === "PathItem" && d.pathPoints.length <= 4) d.applyEffect(ROUGH_XML);
+        // ラフ：まだかけていない長方形にだけかける（note に「ラフ」と残して、二重にかけないように）
+        var roughed = [];
+        if (rough) {
+            for (var i = 0; i < items.length; i++) {
+                var it = items[i];
+                if (it.typename === "PathItem" && it.pathPoints.length <= 4 && it.note !== ROUGH_NOTE) {
+                    it.applyEffect(ROUGH_XML);
+                    it.note = ROUGH_NOTE;
+                    roughed.push(it);
+                }
+            }
+            // 画像にしないときは、ラフを固定して軽くする
+            if (!raster && roughed.length) {
+                doc.selection = null;
+                for (var k = 0; k < roughed.length; k++) roughed[k].selected = true;
+                app.executeMenuCommand("expandStyle");
+                doc.selection = null;
+            }
         }
 
-        // 画像にする範囲：ラフのはみ出しも含め、外側に向けて整数の px にそろえる（ぼやけないように）
-        var vb = temp.visibleBounds;
-        var pad = ROUGH_SIZE + 1;
-        var bounds = [Math.floor(vb[0] - pad), Math.ceil(vb[1] + pad), Math.ceil(vb[2] + pad), Math.floor(vb[3] - pad)];
-        var o = new RasterizeOptions();
-        o.resolution = 72;
-        o.transparency = true;
-        o.antiAliasingMethod = AntiAliasingMethod.ARTOPTIMIZED;
-        o.backgroundBlack = false;
-        o.clippingMask = false;
-        o.padding = 0;
-        var raster = doc.rasterize(temp, bounds, o);  // temp（写し）は画像に置き換わる
-        raster.name = FINISHED_NAME;
-        raster.move(t.outer, ElementPlacement.PLACEATEND);
-        for (var h = 0; h < items.length; h++) items[h].hidden = true;
+        var result = null;
+        if (raster) {
+            var temp = t.outer.groupItems.add();
+            for (var d = 0; d < items.length; d++) items[d].duplicate(temp, ElementPlacement.PLACEATBEGINNING);
+            // 画像にする範囲：ラフのはみ出しも含め、外側に向けて整数の px にそろえる（ぼやけないように）
+            var vb = temp.visibleBounds;
+            var pad = ROUGH_SIZE + 1;
+            var bounds = [Math.floor(vb[0] - pad), Math.ceil(vb[1] + pad), Math.ceil(vb[2] + pad), Math.floor(vb[3] - pad)];
+            var o = new RasterizeOptions();
+            o.resolution = 72;
+            o.transparency = true;
+            o.antiAliasingMethod = AntiAliasingMethod.ARTOPTIMIZED;
+            o.backgroundBlack = false;
+            o.clippingMask = false;
+            o.padding = 0;
+            result = doc.rasterize(temp, bounds, o);  // temp（写し）は画像に置き換わる
+            result.name = FINISHED_NAME;
+            result.move(t.outer, ElementPlacement.PLACEATEND);
+            for (var h = 0; h < items.length; h++) items[h].hidden = true;
+        }
 
         // アートボードが表にぴったり合わせてあれば、ラフのはみ出しも入るように合わせ直す
         var ab = doc.artboards[board];
         var ar = ab.artboardRect, tb = t.bounds;
         if (Math.abs(ar[0] - tb[0]) <= 3 && Math.abs(ar[1] - tb[1]) <= 3 && Math.abs(ar[2] - tb[2]) <= 3 && Math.abs(ar[3] - tb[3]) <= 3) {
-            var rb = raster.visibleBounds;
+            var rb = result ? result.visibleBounds : visibleOf(t.outer);
             ab.artboardRect = [Math.floor(Math.min(tb[0], rb[0])), Math.ceil(Math.max(tb[1], rb[1])),
                                Math.ceil(Math.max(tb[2], rb[2])), Math.floor(Math.min(tb[3], rb[3]))];
         }
         app.redraw();
-        return json({ done: true, count: items.length });
+        return json({ done: true, roughed: roughed.length, raster: !!result, redone: redone });
+    }
+
+    function showShapes(layer) {
+        for (var i = 0; i < layer.pathItems.length; i++) layer.pathItems[i].hidden = false;
     }
 
     function collectShapes(layer, list) {
-        for (var i = layer.pathItems.length - 1; i >= 0; i--) {
-            if (!layer.pathItems[i].hidden) list.push(layer.pathItems[i]);
-        }
+        for (var i = layer.pathItems.length - 1; i >= 0; i--) list.push(layer.pathItems[i]);
     }
 
     // アートボードの上の表：{ outer, header, table（レイヤー）, bounds（下地の外側） }
