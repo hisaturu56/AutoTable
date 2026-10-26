@@ -71,7 +71,9 @@
         },
 
         image: {
-            valign: "top"              // キャラ画像をマスに合わせる位置："top"（顔が見えやすい）／"center"
+            valign: "top",             // キャラ画像をマスに合わせる位置："top"（顔が見えやすい）／"center"
+            logoPadding: 15,           // 1 行目（項目名の行）の画像（ロゴ）は切り抜かずに、この余白を空けてマスに収める
+            filter: "画像:*.png;*.jpg;*.jpeg;*.psd;*.tif;*.tiff;*.ai;*.eps;*.pdf;*.svg"
         },
 
         defaultFitArtboard: true,      // ダイアログの初期値：アートボードを表にぴったり合わせる
@@ -111,6 +113,13 @@
     if (!numberFont) missingFonts.push(CONFIG.number.family + " " + CONFIG.number.style);
     var missingImages = [];
     var roughTargets = [];
+
+    // キャラ欄があるときは、行ごとに入れる画像を選ぶ画面を出す（CSV に書いた画像が初期値）
+    var images = [];
+    if (opts.character) {
+        images = pickImages();
+        if (!images) return;
+    }
 
     // ---- 下地・ヘッダー・テーブル：レイヤーごとに、あれば使い、なければ作る（作ったものにはラフをかける） ----
     var tableLayer = findLayer(CONFIG.layerNames.table);
@@ -158,7 +167,7 @@
         var col = 0;
         if (opts.character) {
             var charCell = makeCell("行" + (r + 1) + "_キャラ", top, body.left, cellH, cellH);
-            if (row[0]) placeImage(charCell.group, row[0], top, body.left, cellH, cellH);
+            if (images[r]) placeImage(charCell.group, images[r], top, body.left, cellH, cellH, r === 0);
             col = 1;
         }
         for (var c = 0; c < opts.cols; c++) {
@@ -566,16 +575,22 @@
     }
 
     // 画像をマスいっぱいに拡大・縮小し、マスの形でクリップする
-    function placeImage(container, path, top, left, w, h) {
-        var file = resolveFile(path);
-        if (!file.exists) {
-            missingImages.push(path);
-            return null;
-        }
+    // 画像をマスに入れる
+    // キャラ画像：マスいっぱいに拡大し、マスの形で切り抜く（あとでグループの中の画像を動かして調整できる）
+    // ロゴ（fitInside）：切り抜かずに、余白を空けてマスの中に収める
+    function placeImage(container, file, top, left, w, h, fitInside) {
         var g = container.groupItems.add();
         g.name = "画像";
         var img = g.placedItems.add();
         img.file = file;
+
+        if (fitInside) {
+            var pad = CONFIG.image.logoPadding;
+            var s = Math.min((w - pad * 2) / img.width, (h - pad * 2) / img.height) * 100;
+            img.resize(s, s);
+            img.position = [left + (w - img.width) / 2, top - (h - img.height) / 2];
+            return g;
+        }
 
         var scale = Math.max(w / img.width, h / img.height) * 100;
         img.resize(scale, scale);
@@ -585,6 +600,72 @@
         g.pathItems.rectangle(top, left, w, h);  // グループの一番上のパスがクリップに使われる
         g.clipped = true;
         return g;
+    }
+
+    // キャラ欄の行ごとに、入れる画像を選ぶ画面。CSV に書いた画像（見つかれば）を初期値にする
+    // 「選ぶ…」は「素材」フォルダから開く。キャンセルなら null（表を作らずに終わる）
+    function pickImages() {
+        var files = [];
+        var notFound = [];  // CSV に書いてあるのに見つからなかった画像
+        var startFolder = materialFolder(false) || (opts.csvFile ? opts.csvFile.parent : null);
+        var filter = $.os.indexOf("Windows") >= 0 ? CONFIG.image.filter : function (f) {
+            return f instanceof Folder || /\.(png|jpe?g|psd|tiff?|ai|eps|pdf|svg)$/i.test(f.name);
+        };
+
+        var dlg = new Window("dialog", "キャラ画像を選ぶ");
+        dlg.alignChildren = "fill";
+        dlg.add("statictext", undefined, "キャラ欄に入れる画像を選んでください（入れた後に Illustrator で位置や大きさを調整できます）");
+        var panel = dlg.add("panel", undefined, "キャラ欄");
+        panel.alignChildren = "fill";
+
+        for (var r = 0; r < opts.rows; r++) {
+            var row = data ? data[r] : [];
+            var label = r === 0 ? "1行目（ロゴ）" : (r + 1) + "行目" + (row[1] ? "　" + row[1] : "");
+            var initial = null;
+            var note = "（なし）";
+            if (row[0]) {
+                var f = resolveFile(row[0]);
+                if (f.exists) initial = f;
+                else { note = "見つかりません：" + row[0]; notFound[r] = row[0]; }
+            }
+            files.push(initial);
+            addRow(panel, r, label, initial ? decodeURI(initial.name) : note);
+        }
+
+        var btns = dlg.add("group");
+        btns.alignment = "right";
+        btns.add("button", undefined, "OK", { name: "ok" });
+        btns.add("button", undefined, "キャンセル", { name: "cancel" });
+        if (dlg.show() !== 1) return null;
+
+        for (var i = 0; i < files.length; i++) {
+            if (!files[i] && notFound[i]) missingImages.push(notFound[i]);
+        }
+        return files;
+
+        function addRow(parent, index, label, name) {
+            var g = parent.add("group");
+            var lbl = g.add("statictext", undefined, label);
+            lbl.preferredSize.width = 160;
+            var nameText = g.add("statictext", undefined, name);
+            nameText.preferredSize.width = 260;
+            var pick = g.add("button", undefined, "選ぶ…");
+            var clear = g.add("button", undefined, "なし");
+            pick.onClick = function () {
+                var from = files[index] ? files[index].parent : startFolder;
+                var f = from ? from.openDlg("画像を選ぶ（" + label + "）", filter, false)
+                             : File.openDialog("画像を選ぶ（" + label + "）", filter, false);
+                if (f) {
+                    files[index] = f;
+                    nameText.text = decodeURI(f.name);
+                    if (f.parent) startFolder = f.parent;  // 次の行も同じフォルダから開く
+                }
+            };
+            clear.onClick = function () {
+                files[index] = null;
+                nameText.text = "（なし）";
+            };
+        }
     }
 
     // 画像ファイルを探す順番：そのままのパス → 「素材」フォルダ → CSV のあるフォルダ
