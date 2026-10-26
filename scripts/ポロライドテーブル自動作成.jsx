@@ -76,7 +76,7 @@
 
         defaultFitArtboard: true,      // ダイアログの初期値：アートボードを表にぴったり合わせる
         defaultExport: true,           // ダイアログの初期値：PNG で書き出す
-        exportFolderName: "素材"        // PNG の保存先：Illustrator ファイルと同じ場所にあるこの名前のフォルダ（なければ作る）
+        exportFolderName: "素材"        // Illustrator ファイルと同じ場所にあるこの名前のフォルダ。キャラ画像をここから探し、PNG もここへ保存（なければ作る）
     };
 
     var opts = showDialog();
@@ -587,10 +587,23 @@
         return g;
     }
 
+    // 画像ファイルを探す順番：そのままのパス → 「素材」フォルダ → CSV のあるフォルダ
+    // 「素材」フォルダでは、フォルダ名を除いたファイル名だけでも探す（images/タフィー.png → 素材/タフィー.png）
     function resolveFile(path) {
         var f = new File(path);
-        if (f.exists || !opts.csvFile) return f;
-        return new File(opts.csvFile.parent.fsName + "/" + path);
+        if (f.exists) return f;
+        var candidates = [];
+        var folder = materialFolder(false);
+        if (folder) {
+            candidates.push(folder.fsName + "/" + path);
+            candidates.push(folder.fsName + "/" + path.replace(/^.*[\/\\]/, ""));
+        }
+        if (opts.csvFile) candidates.push(opts.csvFile.parent.fsName + "/" + path);
+        for (var i = 0; i < candidates.length; i++) {
+            var c = new File(candidates[i]);
+            if (c.exists) return c;
+        }
+        return f;
     }
 
     // アートボードを表（下地・ヘッダー・マス）にぴったり合わせる
@@ -623,7 +636,7 @@
     function exportPNG(csvFile) {
         var defaultName = csvFile ? decodeURI(csvFile.name).replace(/\.csv$/i, "") + ".png" : "ステータス表.png";
         var dest = null;
-        var folder = exportFolder();
+        var folder = materialFolder(true);
         if (folder) {
             dest = new File(folder.fsName + "/" + defaultName);
             if (dest.exists && !confirm("「" + CONFIG.exportFolderName + "」フォルダに同じ名前の PNG があります。上書きしますか？\n"
@@ -648,7 +661,8 @@
     }
 
     // Illustrator ファイルと同じ場所の「素材」フォルダ。ファイルが未保存なら null
-    function exportFolder() {
+    // create が true なら、フォルダがないときに作る
+    function materialFolder(create) {
         var base = null;
         try {
             if (doc.fullName && doc.fullName.exists) base = doc.fullName.parent;
@@ -657,8 +671,9 @@
         }
         if (!base) return null;
         var folder = new Folder(base.fsName + "/" + CONFIG.exportFolderName);
-        if (!folder.exists && !folder.create()) return null;
-        return folder;
+        if (folder.exists) return folder;
+        if (create && folder.create()) return folder;
+        return null;
     }
 
     // フォント名（ファミリー名とスタイル名）でフォントを探す。見つからなければ PostScript 名でも探す
