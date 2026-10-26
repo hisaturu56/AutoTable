@@ -28,7 +28,7 @@
         settingsFile: Folder.userData + "/PolaroidTable_layout.txt",  // 前回入力した値を覚えておくファイル
 
         // このレイヤーがドキュメントにあれば、その長方形を使う（「テーブル」の長方形をマス目に加工する）
-        layerNames: { outer: "下地", header: "ヘッダー", table: "テーブル" },
+        layerNames: { outer: "下地", header: "ヘッダー", table: "テーブル", image: "キャラ画像" },  // キャラ画像はテーブルの上の別レイヤー
 
         defaultRows: 6,                // ダイアログの初期値：行数（CSV を使わないとき）
         defaultCols: 5,                // ダイアログの初期値：列数（キャラ欄は含まない）
@@ -188,7 +188,10 @@
         var col = 0;
         if (opts.character) {
             var charCell = makeCell("行" + (r + 1) + "_キャラ", top, body.left, cellH, cellH);
-            if (images[r]) placeImage(charCell.group, images[r], top, body.left, cellH, cellH, r === 0);
+            if (images[r]) {
+                var imageName = "行" + (r + 1) + "_" + (r === 0 ? "ロゴ" : (row[1] || "キャラ"));
+                placeImage(imageLayerFor(), imageName, images[r], top, body.left, cellH, cellH, r === 0);
+            }
             col = 1;
         }
         for (var c = 0; c < opts.cols; c++) {
@@ -597,12 +600,25 @@
     }
 
     // 画像をマスいっぱいに拡大・縮小し、マスの形でクリップする
+    // キャラ画像のレイヤー（テーブルの上）。なければ作る
+    var imageLayer = null;
+    function imageLayerFor() {
+        if (imageLayer) return imageLayer;
+        imageLayer = findLayer(CONFIG.layerNames.image);
+        if (!imageLayer) {
+            imageLayer = layerRoot.layers.add();
+            imageLayer.name = CONFIG.layerNames.image;
+        }
+        imageLayer.zOrder(ZOrderMethod.BRINGTOFRONT);
+        return imageLayer;
+    }
+
     // 画像をマスに入れる
     // キャラ画像：マスいっぱいに拡大し、マスの形で切り抜く（あとでグループの中の画像を動かして調整できる）
     // ロゴ（fitInside）：切り抜かずに、余白を空けてマスの中に収める
-    function placeImage(container, file, top, left, w, h, fitInside) {
+    function placeImage(container, name, file, top, left, w, h, fitInside) {
         var g = container.groupItems.add();
-        g.name = "画像";
+        g.name = name;
         var img = g.placedItems.add();
         img.file = file;
 
