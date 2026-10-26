@@ -35,6 +35,10 @@
   .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #status { min-height: 1.5em; white-space: pre-wrap; word-break: break-all; }
   #boards label.c { word-break: break-all; }
+  #csvList .csv { display: flex; align-items: center; gap: 4px; margin: 2px 0; }
+  #csvList .csv .name { word-break: break-all; white-space: normal; }
+  #csvList .csv label { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; color: var(--note); font-size: 11px; }
+  #csvList .csv button { margin: 0; padding: 0 6px; }
   html, body { height: 100%; }
   /* スクロールバーを Illustrator の見た目に合わせる */
   ::-webkit-scrollbar { width: 8px; }
@@ -52,12 +56,15 @@
   <!-- ================= 表を作る ================= -->
   <section id="create" class="on">
     <fieldset>
-      <legend>データ</legend>
-      <div class="row"><span id="csvName" class="name note">（CSV を選ばないと空の表を作ります）</span></div>
-      <div class="row">
-        <button id="csvPick">CSV を選ぶ…</button>
-        <button id="csvClear">クリア</button>
+      <legend>データ（CSV）</legend>
+      <div id="csvList"></div>
+      <button id="csvPick" class="wide">CSV を追加…（複数選べます）</button>
+      <div class="grid2" style="grid-template-columns: 1fr 1fr 1fr;">
+        <button id="csvAll">全部選ぶ</button>
+        <button id="csvNone">全部外す</button>
+        <button id="csvClear">空にする</button>
       </div>
+      <div class="note">チェックした CSV の表をまとめて作ります（1 つの CSV ＝ 1 つのアートボード）。「キャラ欄」は CSV ごとに変えられます</div>
     </fieldset>
 
     <fieldset>
@@ -66,8 +73,8 @@
         <label class="k">行数</label><input type="number" id="rows" min="1">
         <label>列数</label><input type="number" id="cols" min="1">
       </div>
-      <div class="note">行数・列数は CSV を使わないとき（列数はキャラ欄を除く）</div>
       <label class="c"><input type="checkbox" id="character">左端にキャラ欄（正方形）を入れる</label>
+      <div class="note">CSV を使わないときの設定です（列数はキャラ欄を除く）</div>
     </fieldset>
 
     <fieldset>
@@ -90,8 +97,8 @@
       <legend>オプション</legend>
       <label class="c"><input type="checkbox" id="rough">ラフ効果をかける</label>
       <label class="c"><input type="checkbox" id="fitArtboard">アートボードを表にぴったり合わせる</label>
-      <label class="c"><input type="checkbox" id="overwrite">今のアートボードの表を作り直す（上書き）</label>
-      <div class="note">作り直す表をクリックしてから押してください。位置はそのままで、ほかの設定で作り直します</div>
+      <label class="c"><input type="checkbox" id="overwrite">同じ名前の表があれば作り直す（上書き）</label>
+      <div class="note">CSV と同じ名前のアートボードの表を消して、同じ位置に作り直します（CSV を使わないときは、今のアートボードの表）</div>
       <div class="note">PNG の書き出しは「書き出し」タブで行います</div>
     </fieldset>
 
@@ -213,7 +220,7 @@
   // ---------------- 表を作る ----------------
 
   var form = load("create", DEFAULTS);
-  var csv = load("csv", null);  // { path, name, hasImages }
+  var csvs = load("csvs", []);  // [{ path, name, hasImages, checked, character }]
 
   for (var r = 0; r < RATIOS.length; r++) {
     $("wr").add(new Option(RATIOS[r].label, r));
@@ -234,51 +241,104 @@
   });
 
   $("csvPick").addEventListener("click", function () {
-    call("PT.pickCSV()", function (f) {
-      if (!f) return;
-      csv = f;
-      $("character").checked = f.hasImages;
-      save("csv", csv);
+    call("PT.pickCSVs()", function (list) {
+      if (!list || !list.length) return;
+      list.forEach(function (f) {
+        // 同じ CSV がもう一覧にあれば入れ替える
+        csvs = csvs.filter(function (c) { return c.path !== f.path; });
+        csvs.push({ path: f.path, name: f.name, hasImages: f.hasImages, checked: true, character: f.hasImages });
+      });
       updateCSV();
-      saveForm();
     });
   });
-  $("csvClear").addEventListener("click", function () {
-    csv = null;
-    save("csv", null);
-    updateCSV();
-  });
+  $("csvAll").addEventListener("click", function () { csvs.forEach(function (c) { c.checked = true; }); updateCSV(); });
+  $("csvNone").addEventListener("click", function () { csvs.forEach(function (c) { c.checked = false; }); updateCSV(); });
+  $("csvClear").addEventListener("click", function () { csvs = []; updateCSV(); });
   $("layoutReset").addEventListener("click", function () {
     ["x", "y", "w", "h", "wr", "hr"].forEach(function (k) { $(k).value = DEFAULTS[k]; });
     updateSize();
     saveForm();
   });
 
+  // チェックを入れた CSV の表を 1 つずつ順番に作る（CSV がなければ空の表を 1 つ）
   $("createBtn").addEventListener("click", function () {
     var w = parseFloat($("w").value) * RATIOS[$("wr").value].value;
     var h = parseFloat($("h").value) * RATIOS[$("hr").value].value;
-    var options = {
-      csvPath: csv ? csv.path : "",
+    var base = {
       rows: $("rows").value, cols: $("cols").value,
-      character: $("character").checked,
       x: $("x").value, y: $("y").value, w: w, h: h,
       rough: $("rough").checked, fitArtboard: $("fitArtboard").checked,
       overwrite: $("overwrite").checked
     };
+    var jobs = [];
+    if (!csvs.length) {
+      jobs.push({ name: "表", csvPath: "", character: $("character").checked });
+    } else {
+      csvs.forEach(function (c) { if (c.checked) jobs.push({ name: c.name, csvPath: c.path, character: c.character }); });
+      if (!jobs.length) { setStatus("作る CSV にチェックを入れてください。"); return; }
+    }
+
+    var made = [];
     busy(true, "表を作っています…");
-    call("PT.createTable(" + arg(folder + "/jsx/create_table.jsx") + ", " + arg(options) + ")", function (res) {
-      busy(false);
-      if (res && res.message) {
-        setStatus(res.message);
+    (function next(i) {
+      if (i >= jobs.length) {
+        busy(false);
         $("overwrite").checked = false;  // うっかり続けて上書きしないように、作り終わったら外す
+        setStatus(jobs.length === 1 ? (made[0] || "") : made.length + " / " + jobs.length + " 個の表を作りました。\n\n" + made.join("\n\n"));
+        return;
       }
-    });
+      var job = jobs[i];
+      var options = {};
+      for (var k in base) options[k] = base[k];
+      options.csvPath = job.csvPath;
+      options.character = job.character;
+      setStatus("表を作っています…（" + (i + 1) + " / " + jobs.length + "）" + (job.csvPath ? job.name : ""));
+      call("PT.createTable(" + arg(folder + "/jsx/create_table.jsx") + ", " + arg(options) + ")", function (res) {
+        if (!res) { busy(false); return; }  // エラーのときは止める（メッセージは表示済み）
+        if (res.message) made.push(jobs.length === 1 ? res.message : "【" + job.name + "】" + res.message.split("\n")[0]);
+        next(i + 1);
+      });
+    })(0);
   });
 
+  // CSV の一覧を表示する（作る・キャラ欄のチェック、× で一覧から外す）
   function updateCSV() {
-    $("csvName").textContent = csv ? csv.name : "（CSV を選ばないと空の表を作ります）";
-    $("rows").disabled = !!csv;
-    $("cols").disabled = !!csv;
+    var box = $("csvList");
+    box.innerHTML = "";
+    if (!csvs.length) {
+      box.innerHTML = '<div class="note">（CSV を追加しないと空の表を作ります）</div>';
+    }
+    csvs.forEach(function (c, i) {
+      var row = document.createElement("div");
+      row.className = "csv";
+      var make = document.createElement("input");
+      make.type = "checkbox";
+      make.checked = c.checked;
+      make.title = "この CSV の表を作る";
+      make.addEventListener("change", function () { c.checked = make.checked; save("csvs", csvs); });
+      var name = document.createElement("span");
+      name.className = "name";
+      name.textContent = c.name;
+      name.title = c.path;
+      var charLabel = document.createElement("label");
+      var charCheck = document.createElement("input");
+      charCheck.type = "checkbox";
+      charCheck.checked = c.character;
+      charCheck.addEventListener("change", function () { c.character = charCheck.checked; save("csvs", csvs); });
+      charLabel.appendChild(charCheck);
+      charLabel.appendChild(document.createTextNode("キャラ欄"));
+      var remove = document.createElement("button");
+      remove.textContent = "×";
+      remove.title = "一覧から外す（ファイルは消えません）";
+      remove.addEventListener("click", function () { csvs.splice(i, 1); updateCSV(); });
+      row.appendChild(make);
+      row.appendChild(name);
+      row.appendChild(charLabel);
+      row.appendChild(remove);
+      box.appendChild(row);
+    });
+    $("rows").disabled = $("cols").disabled = $("character").disabled = csvs.length > 0;
+    save("csvs", csvs);
   }
 
   function updateSize() {

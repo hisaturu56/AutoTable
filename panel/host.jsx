@@ -16,11 +16,16 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
 
     // ---- 表を作る ----
 
-    // CSV を選ぶ。1 列目が画像ファイルか（キャラ欄ありか）も返す
-    function pickCSV() {
-        var f = File.openDialog("CSV ファイルを選んでください", "*.csv");
-        if (!f) return json(null);
-        return json({ path: f.fsName, name: decodeURI(f.name), hasImages: csvHasImages(f) });
+    // CSV を選ぶ（複数選べる）。それぞれ 1 列目が画像ファイルか（キャラ欄ありか）も返す
+    function pickCSVs() {
+        var files = File.openDialog("CSV ファイルを選んでください（Ctrl や Shift で複数選べます）", "*.csv", true);
+        if (!files) return json([]);
+        if (!(files instanceof Array)) files = [files];
+        var list = [];
+        for (var i = 0; i < files.length; i++) {
+            list.push({ path: files[i].fsName, name: decodeURI(files[i].name).replace(/\.csv$/i, ""), hasImages: csvHasImages(files[i]) });
+        }
+        return json(list);
     }
 
     function csvHasImages(f) {
@@ -399,7 +404,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
     }
 
     return {
-        pickCSV: pickCSV,
+        pickCSVs: pickCSVs,
         getTextSize: getTextSize,
         setTextSize: setTextSize,
         createTable: createTable,

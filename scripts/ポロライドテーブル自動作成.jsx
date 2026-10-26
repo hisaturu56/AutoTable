@@ -128,15 +128,26 @@
     // アートボード名・レイヤー名・PNG のファイル名に使う
     var tableName = opts.csvFile ? decodeURI(opts.csvFile.name).replace(/\.csv$/i, "") : "";
 
-    // 作り直し：今のアートボードの表を消して、同じ位置（下地の中心）に作り直す
+    // 作り直し：前の表を消して、同じ位置（下地の中心）に作り直す
+    // CSV のときは同じ名前（CSV のファイル名）のアートボードの表、CSV を使わないときは今のアートボードの表
+    // CSV で同じ名前の表がなければ、ふつうに新しく作る
     var replaced = false;
+    var old = null;
     if (opts.overwrite) {
-        var old = findTableOnArtboard(abIndex);
-        if (!old) {
+        var named = tableName ? artboardByName(tableName) : -1;
+        if (named >= 0) {
+            abIndex = named;
+            ab = doc.artboards[abIndex].artboardRect;
+            doc.artboards.setActiveArtboardIndex(abIndex);
+        }
+        if (!tableName || named >= 0) old = findTableOnArtboard(abIndex);
+        if (!old && !tableName) {
             alert("アートボード " + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」に、作り直す表が見つかりません。\n"
                 + "作り直したい表をクリックして、そのアートボードを選んでから実行してください。");
             return;
         }
+    }
+    if (old) {
         if (!confirm("アートボード " + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」の表を消して、作り直します。\n"
                 + "（調整したキャラ画像や文字の大きさも元に戻ります）\n\nよろしいですか？")) {
             return;
@@ -375,7 +386,7 @@
         roughCheck.value = CONFIG.rough.enabled;
         var fitCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを表にぴったり合わせる（ラフのはみ出しも含む）");
         fitCheck.value = CONFIG.defaultFitArtboard;
-        var overwriteCheck = optPanel.add("checkbox", undefined, "今のアートボードの表を作り直す（上書き。位置はそのまま）");
+        var overwriteCheck = optPanel.add("checkbox", undefined, "同じ名前の表があれば作り直す（上書き。位置はそのまま。CSV なしは今のアートボード）");
         overwriteCheck.value = false;
         optPanel.add("statictext", undefined, "※ PNG の書き出しは、パネルの「書き出し」（または 表の書き出し.jsx）で行います");
 
@@ -867,6 +878,14 @@
         var rect = [Math.floor(vb[0] - pad), Math.ceil(vb[1] + pad), Math.ceil(vb[2] + pad), Math.floor(vb[3] - pad)];
         doc.artboards[abIndex].artboardRect = rect;
         return { w: rect[2] - rect[0], h: rect[1] - rect[3] };
+    }
+
+    // 名前が同じアートボードの番号。なければ -1
+    function artboardByName(name) {
+        for (var i = 0; i < doc.artboards.length; i++) {
+            if (doc.artboards[i].name === name) return i;
+        }
+        return -1;
     }
 
     // アートボードの上にある表（「下地」レイヤーを持つ表のレイヤー）を探す
