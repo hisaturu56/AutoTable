@@ -44,7 +44,8 @@
         cornerRadius: 0,               // マス目の角丸（0 で角丸なし）
 
         // ラフ：サイズ 1 px（入力値）、詳細 100/inch、ギザギザ。マスの長方形だけにかけ、文字と画像にはかけない
-        rough: { enabled: true, size: 1, detail: 100 },  // enabled はダイアログの初期値
+        rough: { enabled: true, size: 1, detail: 100, fix: true },  // enabled・fix はダイアログの初期値
+                                       // fix：かけたラフを普通の形に変えて固定する（表が増えても画面が重くならないように）
 
         colors: {                      // RGB（新しく作るときの色）
             outer:  [128, 128, 128],   // #808080
@@ -277,18 +278,25 @@
         }
     }
 
-    // マスの長方形だけを選択して終わる（ラフが効いていなければ「効果 → 最後の効果を適用」でまとめてかけられる）
-    doc.selection = null;
-    for (var s = 0; s < roughTargets.length; s++) roughTargets[s].selected = true;
-    app.redraw();
-
     var fitted = null;
     if (opts.fitArtboard) {
         fitted = fitArtboardToTable([outerRect, headerRect].concat(cells), opts.rough && !roughFailed);
     }
 
+    // ラフを固定する：ラフの効果は画面を描き直すたびに計算されて重いので、「アピアランスを分割」で普通の形に変える
+    var roughFixed = false;
+    if (opts.rough && !roughFailed && opts.fixRough) roughFixed = fixRough(roughTargets);
+
+    // ラフが固定されていなければ、マスの長方形だけを選択して終わる
+    //（ラフが効いていなければ「効果 → 最後の効果を適用」でまとめてかけられる）
+    doc.selection = null;
+    if (!roughFixed) {
+        for (var s = 0; s < roughTargets.length; s++) roughTargets[s].selected = true;
+    }
+    app.redraw();
+
     var msg = "ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
-            + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? "、ラフあり" : "、ラフなし") + "）\n"
+            + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? (roughFixed ? "、ラフあり（固定）" : "、ラフあり") : "、ラフなし") + "）\n"
             + "表全体：" + round(opts.layout.w) + " × " + round(opts.layout.h) + " px\n"
             + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px\n"
             + "文字の大きさ：文字 " + round(CONFIG.text.size * textScale) + " pt ／ 数字 " + round(CONFIG.number.size * textScale) + " pt";
@@ -388,6 +396,8 @@
         optPanel.alignChildren = "left";
         var roughCheck = optPanel.add("checkbox", undefined, "ラフ効果をかける（手描き風のギザギザ）");
         roughCheck.value = CONFIG.rough.enabled;
+        var fixCheck = optPanel.add("checkbox", undefined, "ラフを固定する（画面が軽くなる。あとからラフの設定は変えられない）");
+        fixCheck.value = CONFIG.rough.fix;
         var fitCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを表にぴったり合わせる（ラフのはみ出しも含む）");
         fitCheck.value = CONFIG.defaultFitArtboard;
         var overwriteCheck = optPanel.add("checkbox", undefined, "同じ名前の表があれば作り直す（上書き。位置はそのまま。CSV なしは今のアートボード）");
@@ -453,6 +463,7 @@
             cols: cols,
             character: charCheck.value,
             rough: roughCheck.value,
+            fixRough: fixCheck.value,
             fitArtboard: fitCheck.value,
             overwrite: overwriteCheck.value
         };
@@ -487,6 +498,7 @@
             cols: cols,
             character: !!p.character,
             rough: !!p.rough,
+            fixRough: p.fixRough === undefined ? CONFIG.rough.fix : !!p.fixRough,
             fitArtboard: !!p.fitArtboard,
             overwrite: !!p.overwrite,
             data: p.data ? copyRows(p.data) : null,  // Notion から読んだ表（CSV の代わり）
@@ -905,6 +917,20 @@
         return -1;
     }
 
+    // ラフの効果を「アピアランスを分割」で普通の形にする。できたら true
+    function fixRough(items) {
+        try {
+            doc.selection = null;
+            for (var i = 0; i < items.length; i++) items[i].selected = true;
+            app.executeMenuCommand("expandStyle");
+            doc.selection = null;
+            return true;
+        } catch (e) {
+            doc.selection = null;
+            return false;
+        }
+    }
+
     // アートボードの上にある表（「下地」レイヤーを持つ表のレイヤー）を探す
     function findTableOnArtboard(index) {
         var r = doc.artboards[index].artboardRect;
@@ -912,7 +938,7 @@
             var outer = null;
             try {
                 var sub = doc.layers[i].layers.getByName(CONFIG.layerNames.outer);
-                if (sub.pathItems.length) outer = sub.pathItems[0];
+                if (sub.pageItems.length) outer = sub.pageItems[0];  // ラフを固定すると長方形ではなくなることがあるので pageItems
             } catch (e) {
                 outer = null;
             }

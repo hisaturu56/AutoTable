@@ -132,8 +132,9 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
                 if (layer.name === TABLE_LAYER) {
                     for (var g = 0; g < layer.groupItems.length; g++) {
                         var group = layer.groupItems[g];
-                        if (!group.pathItems.length || !group.textFrames.length) continue;
-                        var b = group.pathItems[0].geometricBounds;
+                        var cell = cellShape(group);
+                        if (!cell || !group.textFrames.length) continue;
+                        var b = cell.geometricBounds;
                         var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
                         if (cx < r[0] || cx > r[2] || cy > r[1] || cy < r[3]) continue;
                         for (var t = 0; t < group.textFrames.length; t++) {
@@ -146,6 +147,50 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
             }
         })(doc.layers);
         return list;
+    }
+
+    // マスのグループの中の、文字ではない最初のもの（マスの形。ラフを固定すると長方形ではなくなることがある）
+    function cellShape(group) {
+        for (var i = 0; i < group.pageItems.length; i++) {
+            if (group.pageItems[i].typename !== "TextFrame") return group.pageItems[i];
+        }
+        return null;
+    }
+
+    // アートボードの表のラフを固定する（「アピアランスを分割」。前のバージョンで作った表を軽くするため）
+    function fixRough(board) {
+        var doc = activeDoc();
+        if (!doc || !doc.artboards[board]) return json({ count: 0 });
+        var r = doc.artboards[board].artboardRect;
+        var inside = function (item) {
+            var b = item.geometricBounds;
+            var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+            return cx >= r[0] && cx <= r[2] && cy <= r[1] && cy >= r[3];
+        };
+        var items = [];
+        (function walk(layers) {
+            for (var i = 0; i < layers.length; i++) {
+                var layer = layers[i];
+                if (layer.name === "下地" || layer.name === "ヘッダー") {
+                    for (var p = 0; p < layer.pathItems.length; p++) if (inside(layer.pathItems[p])) items.push(layer.pathItems[p]);
+                } else if (layer.name === TABLE_LAYER) {
+                    for (var g = 0; g < layer.groupItems.length; g++) {
+                        var group = layer.groupItems[g];
+                        for (var q = 0; q < group.pathItems.length; q++) if (inside(group.pathItems[q])) items.push(group.pathItems[q]);
+                    }
+                }
+                walk(layer.layers);
+            }
+        })(doc.layers);
+        if (!items.length) return json({ count: 0 });
+        doc.selection = null;
+        for (var k = 0; k < items.length; k++) {
+            try { items[k].locked = false; items[k].selected = true; } catch (e) {}
+        }
+        app.executeMenuCommand("expandStyle");
+        doc.selection = null;
+        app.redraw();
+        return json({ count: items.length });
     }
 
     // ---- 画像調整 ----
@@ -433,6 +478,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         pickCSVs: pickCSVs,
         docNames: docNames,
         getTextSize: getTextSize,
+        fixRough: fixRough,
         setTextSize: setTextSize,
         createTable: createTable,
         listImages: listImages,

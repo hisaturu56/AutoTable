@@ -130,6 +130,7 @@
     <fieldset>
       <legend>オプション</legend>
       <label class="c"><input type="checkbox" id="rough">ラフ効果をかける</label>
+      <label class="c"><input type="checkbox" id="fixRough">ラフを固定する（画面が軽くなる）</label>
       <label class="c"><input type="checkbox" id="fitArtboard">アートボードを表にぴったり合わせる</label>
       <label class="c"><input type="checkbox" id="overwrite">同じ名前の表があれば作り直す（上書き）</label>
       <div class="note">同じ名前（Notion は「台本タイトル_表の名前」、CSV はファイル名）のアートボードの表を消して、同じ位置に作り直します（空の表のときは、今のアートボードの表）</div>
@@ -142,7 +143,10 @@
   <!-- ================= 調整（文字の大きさ・キャラ画像） ================= -->
   <section id="images">
     <div class="row"><label class="k">アートボード</label><select id="board"></select></div>
-    <button id="imgReload" class="wide">一覧を更新</button>
+    <div class="grid2">
+      <button id="imgReload">一覧を更新</button>
+      <button id="fixRoughBtn" title="前のバージョンで作った表など、ラフが重いときに">この表のラフを固定</button>
+    </div>
 
     <fieldset>
       <legend>文字の大きさ（この表の文字すべて）</legend>
@@ -195,7 +199,7 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var DEFAULTS = { rows: 6, cols: 5, character: true, x: 960, y: 540, w: 1505, h: 592.5, wr: 0, hr: 0,
-                   rough: true, fitArtboard: true, overwrite: true };
+                   rough: true, fixRough: true, fitArtboard: true, overwrite: true };
   var RATIOS = [
     { label: "100%（そのまま）", value: 1 },
     { label: "67%（3分の2）", value: 2 / 3 },
@@ -221,6 +225,11 @@
     cep.evalScript(script, function (result) {
       if (typeof result === "string" && result.indexOf("ERROR:") === 0) {
         setStatus("エラー：" + result.slice(6));
+        if (done) done(null);
+        return;
+      }
+      if (result === "EvalScript error.") {  // Illustrator 側で処理が止まったとき（エラーの中身は返ってこない）
+        setStatus("エラー：Illustrator で処理が止まりました。Illustrator が重いときや、別の画面が開いているときに起きることがあります。少し待ってからもう一度押してください。");
         if (done) done(null);
         return;
       }
@@ -264,11 +273,11 @@
     $("hr").add(new Option(RATIOS[r].label, r));
   }
   ["rows", "cols", "x", "y", "w", "h", "wr", "hr"].forEach(function (k) { $(k).value = form[k]; });
-  ["character", "rough", "fitArtboard", "overwrite"].forEach(function (k) { $(k).checked = !!form[k]; });
+  ["character", "rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) { $(k).checked = !!form[k]; });
   updateCSV();
   updateSize();
 
-  ["rows", "cols", "x", "y", "w", "h", "wr", "hr", "character", "rough", "fitArtboard", "overwrite"].forEach(function (k) {
+  ["rows", "cols", "x", "y", "w", "h", "wr", "hr", "character", "rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) {
     $(k).addEventListener("input", saveForm);
     $(k).addEventListener("change", saveForm);
   });
@@ -304,7 +313,7 @@
     var base = {
       rows: $("rows").value, cols: $("cols").value,
       x: $("x").value, y: $("y").value, w: w, h: h,
-      rough: $("rough").checked, fitArtboard: $("fitArtboard").checked,
+      rough: $("rough").checked, fixRough: $("fixRough").checked, fitArtboard: $("fitArtboard").checked,
       overwrite: $("overwrite").checked
     };
     var jobs = [];
@@ -340,7 +349,13 @@
       }
       setStatus("表を作っています…（" + (i + 1) + " / " + jobs.length + "）" + (job.csvPath || job.data ? job.name : ""));
       call("PT.createTable(" + arg(folder + "/jsx/create_table.jsx") + ", " + arg(options) + ")", function (res) {
-        if (!res) { busy(false); return; }  // エラーのときは止める（メッセージは表示済み）
+        if (!res) {  // エラーのときは止める
+          busy(false);
+          if (!$("status").textContent || $("status").textContent.indexOf("表を作っています") === 0) {
+            setStatus("「" + job.name + "」を作るところで止まりました。Illustrator の画面に出ているメッセージを確かめてください。");
+          }
+          return;
+        }
         if (res.message) made.push(jobs.length === 1 ? res.message : "【" + job.name + "】" + res.message.split("\n")[0]);
         next(i + 1);
       });
@@ -543,7 +558,7 @@
   function saveForm() {
     var f = {};
     ["rows", "cols", "x", "y", "w", "h", "wr", "hr"].forEach(function (k) { f[k] = $(k).value; });
-    ["character", "rough", "fitArtboard", "overwrite"].forEach(function (k) { f[k] = $(k).checked; });
+    ["character", "rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) { f[k] = $(k).checked; });
     save("create", f);
   }
 
@@ -560,6 +575,17 @@
     fillImageList(board);
     loadText();
   }
+
+  // ラフを固定する（「アピアランスを分割」。画面を軽くする）
+  $("fixRoughBtn").addEventListener("click", function () {
+    if (currentBoard < 0) return;
+    busy(true, "ラフを固定しています…");
+    call("PT.fixRough(" + currentBoard + ")", function (r) {
+      busy(false);
+      if (r) setStatus(r.count ? "ラフを固定しました（" + r.count + " 個）。元に戻すときは Ctrl+Z" : "この表に、固定するラフがありません。");
+      loadText();
+    });
+  });
 
   // ---- 文字の大きさ ----
 
