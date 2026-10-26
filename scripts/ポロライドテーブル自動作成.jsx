@@ -246,10 +246,6 @@
     if (opts.fitArtboard) {
         fitted = fitArtboardToTable([outerRect, headerRect].concat(cells), opts.rough && !roughFailed);
     }
-    var exported = null;
-    if (opts.exportPNG) {
-        exported = exportPNG(doc.artboards[abIndex].name);
-    }
 
     var msg = "ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
             + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? "、ラフあり" : "、ラフなし") + "）\n"
@@ -258,8 +254,7 @@
             + "文字の大きさ：文字 " + round(CONFIG.text.size * textScale) + " pt ／ 数字 " + round(CONFIG.number.size * textScale) + " pt";
     msg += "\n\nアートボード：" + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」" + (newArtboard ? "（新しく追加）" : "");
     if (fitted) msg += "\nアートボードを表に合わせました：" + fitted.w + " × " + fitted.h + " px";
-    if (exported) msg += "\n\nPNG を書き出しました：\n" + exported.fsName;
-    else if (opts.character) msg += "\n\nキャラ画像を「キャラ画像の調整」で調整してから、パネルの「PNG で書き出す」で書き出してください。";
+    msg += "\n\n" + (opts.character ? "キャラ画像を調整してから、" : "") + "パネルの「書き出し」で PNG を書き出してください。";
     if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
     if (missingImages.length) msg += "\n\n※見つからなかった画像：\n" + missingImages.join("\n");
     if (roughFailed) msg += "\n\n※ラフ効果を適用できませんでした。効果メニューから手動で適用してください。";
@@ -354,13 +349,7 @@
         roughCheck.value = CONFIG.rough.enabled;
         var fitCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを表にぴったり合わせる（ラフのはみ出しも含む）");
         fitCheck.value = CONFIG.defaultFitArtboard;
-        var exportCheck = optPanel.add("checkbox", undefined, "作成後すぐ、アートボードを PNG で書き出す（背景透過）");
-        optPanel.add("statictext", undefined, "※ キャラ欄がある表は、画像を調整してから、パネルの「PNG で書き出す」で書き出します");
-        // キャラ欄がない表はすぐ書き出し、ある表は調整が終わってから書き出す（初期値。チェックで変えられる）
-        exportCheck.value = !charCheck.value;
-        charCheck.onClick = function () {
-            exportCheck.value = !charCheck.value;
-        };
+        optPanel.add("statictext", undefined, "※ PNG の書き出しは、パネルの「書き出し」（または 表の書き出し.jsx）で行います");
 
         var btns = dlg.add("group");
         btns.alignment = "right";
@@ -376,10 +365,7 @@
                 g1.enabled = false;
                 g2.enabled = false;
                 var rowsData = readCSV(f);
-                if (rowsData) {
-                    charCheck.value = hasImageColumn(rowsData);
-                    exportCheck.value = !charCheck.value;
-                }
+                if (rowsData) charCheck.value = hasImageColumn(rowsData);
             }
         };
         clearBtn.onClick = function () {
@@ -387,7 +373,6 @@
             csvLabel.text = "（CSV を選ばないと空の表を作ります）";
             g1.enabled = true;
             g2.enabled = true;
-            exportCheck.value = !charCheck.value;
         };
 
         if (dlg.show() !== 1) return null;
@@ -425,8 +410,7 @@
             cols: cols,
             character: charCheck.value,
             rough: roughCheck.value,
-            fitArtboard: fitCheck.value,
-            exportPNG: exportCheck.value
+            fitArtboard: fitCheck.value
         };
     }
 
@@ -459,8 +443,7 @@
             cols: cols,
             character: !!p.character,
             rough: !!p.rough,
-            fitArtboard: !!p.fitArtboard,
-            exportPNG: !!p.exportPNG
+            fitArtboard: !!p.fitArtboard
         };
     }
 
@@ -905,37 +888,6 @@
         for (var k = 2; ; k++) {
             if (!used[name + " (" + k + ")"]) return name + " (" + k + ")";
         }
-    }
-
-    // アクティブなアートボードを背景透過の PNG で書き出す
-    // Illustrator ファイルが保存済みなら、同じ場所の「素材」フォルダへ自動で保存（フォルダがなければ作る）
-    // 未保存のときやフォルダを作れないときは、保存先を選ぶ画面を出す
-    function exportPNG(name) {
-        var defaultName = name.replace(/[\\\/:*?"<>|]/g, "_") + ".png";  // ファイル名に使えない文字は _ に
-        var csvFile = opts.csvFile;
-        var dest = null;
-        var folder = materialFolder(true);
-        if (folder) {
-            dest = new File(folder.fsName + "/" + defaultName);
-            if (dest.exists && !confirm("「" + CONFIG.exportFolderName + "」フォルダに同じ名前の PNG があります。上書きしますか？\n"
-                    + dest.fsName + "\n\n「いいえ」を選ぶと、保存先を選ぶ画面を出します。")) {
-                dest = dest.saveDlg("PNG の保存先", "*.png");
-            }
-        } else {
-            var start = csvFile ? csvFile.parent.fsName + "/" : "";
-            dest = new File(start + defaultName).saveDlg("PNG の保存先", "*.png");
-        }
-        if (!dest) return null;
-
-        doc.artboards.setActiveArtboardIndex(abIndex);
-        var o = new ExportOptionsPNG24();
-        o.antiAliasing = true;
-        o.transparency = true;
-        o.artBoardClipping = true;
-        o.horizontalScale = 100;
-        o.verticalScale = 100;
-        doc.exportFile(dest, ExportType.PNG24, o);
-        return dest;
     }
 
     // Illustrator ファイルと同じ場所の「素材」フォルダ。ファイルが未保存なら null

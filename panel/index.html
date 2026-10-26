@@ -85,8 +85,7 @@
       <legend>オプション</legend>
       <label class="c"><input type="checkbox" id="rough">ラフ効果をかける</label>
       <label class="c"><input type="checkbox" id="fitArtboard">アートボードを表にぴったり合わせる</label>
-      <label class="c"><input type="checkbox" id="exportPNG">作成後すぐ PNG で書き出す</label>
-      <div class="note">キャラ欄がある表は、画像を調整してから「書き出し」タブで書き出します</div>
+      <div class="note">PNG の書き出しは「書き出し」タブで行います</div>
     </fieldset>
 
     <button id="createBtn" class="wide main">表を作る</button>
@@ -141,7 +140,7 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var DEFAULTS = { rows: 6, cols: 5, character: true, x: 960, y: 540, w: 1505, h: 592.5, wr: 0, hr: 0,
-                   rough: true, fitArtboard: true, exportPNG: false };
+                   rough: true, fitArtboard: true };
   var RATIOS = [
     { label: "100%（そのまま）", value: 1 },
     { label: "67%（3分の2）", value: 2 / 3 },
@@ -210,11 +209,11 @@
     $("hr").add(new Option(RATIOS[r].label, r));
   }
   ["rows", "cols", "x", "y", "w", "h", "wr", "hr"].forEach(function (k) { $(k).value = form[k]; });
-  ["character", "rough", "fitArtboard", "exportPNG"].forEach(function (k) { $(k).checked = !!form[k]; });
+  ["character", "rough", "fitArtboard"].forEach(function (k) { $(k).checked = !!form[k]; });
   updateCSV();
   updateSize();
 
-  ["rows", "cols", "x", "y", "w", "h", "wr", "hr", "character", "rough", "fitArtboard", "exportPNG"].forEach(function (k) {
+  ["rows", "cols", "x", "y", "w", "h", "wr", "hr", "character", "rough", "fitArtboard"].forEach(function (k) {
     $(k).addEventListener("input", saveForm);
     $(k).addEventListener("change", saveForm);
   });
@@ -222,18 +221,12 @@
     $(k).addEventListener("input", updateSize);
     $(k).addEventListener("change", updateSize);
   });
-  // キャラ欄がない表はすぐ書き出し、ある表は調整が終わってから書き出す（初期値。チェックで変えられる）
-  $("character").addEventListener("change", function () {
-    $("exportPNG").checked = !$("character").checked;
-    saveForm();
-  });
 
   $("csvPick").addEventListener("click", function () {
     call("PT.pickCSV()", function (f) {
       if (!f) return;
       csv = f;
       $("character").checked = f.hasImages;
-      $("exportPNG").checked = !f.hasImages;
       save("csv", csv);
       updateCSV();
       saveForm();
@@ -258,7 +251,7 @@
       rows: $("rows").value, cols: $("cols").value,
       character: $("character").checked,
       x: $("x").value, y: $("y").value, w: w, h: h,
-      rough: $("rough").checked, fitArtboard: $("fitArtboard").checked, exportPNG: $("exportPNG").checked
+      rough: $("rough").checked, fitArtboard: $("fitArtboard").checked
     };
     busy(true, "表を作っています…");
     call("PT.createTable(" + arg(folder + "/jsx/create_table.jsx") + ", " + arg(options) + ")", function (res) {
@@ -283,7 +276,7 @@
   function saveForm() {
     var f = {};
     ["rows", "cols", "x", "y", "w", "h", "wr", "hr"].forEach(function (k) { f[k] = $(k).value; });
-    ["character", "rough", "fitArtboard", "exportPNG"].forEach(function (k) { f[k] = $(k).checked; });
+    ["character", "rough", "fitArtboard"].forEach(function (k) { f[k] = $(k).checked; });
     save("create", f);
   }
 
