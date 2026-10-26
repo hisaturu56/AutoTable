@@ -504,7 +504,7 @@
     }).then(function (r) {
       if (!r.db) { renderNotion("この台本には「テーブルリスト」がありません"); return; }
       notionTables = r.tables.map(function (t) {
-        return { name: t.name, rows: t.rows, hasImages: t.hasImages, checked: true, character: t.hasImages };
+        return { name: twoDigits(t.name), rows: t.rows, hasImages: t.hasImages, checked: true, character: t.hasImages };
       });
       renderNotion("「" + r.db.name + "」に表がありません");
     }).catch(notionFailed);

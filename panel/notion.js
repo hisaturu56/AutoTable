@@ -174,7 +174,8 @@
   }
 
   // テーブルリストの行を、表ごとにまとめる
-  //   戻り値：[{ name, hasImages, rows: [[画像?, 列1, 列2, …]] }]（表は最初に出てきた順、行は「行」の番号順）
+  //   戻り値：[{ name, hasImages, rows: [[画像?, 列1, 列2, …]] }]（表は名前の頭の番号順、行は「行」の番号順）
+  //   Notion は行を決まった順で返さないので、表の並びは名前の番号で決める
   function groupTables(pages) {
     var tables = [], byName = {};
     pages.forEach(function (p, i) {
@@ -191,6 +192,12 @@
       }
       byName[name].items.push(row);
     });
+    tables.forEach(function (t, i) { t.first = i; });
+    tables.sort(function (a, b) {
+      var na = leadingNumber(a.name), nb = leadingNumber(b.name);
+      if (na !== nb) return na - nb;  // 番号のない表は、番号のある表の後ろ
+      return a.first - b.first;
+    });
     return tables.map(function (t) {
       t.items.sort(function (a, b) { return a.order - b.order || a.index - b.index; });
       var used = 0, hasImages = false;
@@ -204,6 +211,12 @@
       });
       return { name: t.name, hasImages: hasImages, rows: rows };
     });
+  }
+
+  // 名前の頭の番号（「01_基礎…」→ 1）。なければ とても大きい数
+  function leadingNumber(name) {
+    var m = /^\s*(\d+)/.exec(name);
+    return m ? parseInt(m[1], 10) : Infinity;
   }
 
   function readTables(pageId, token) {

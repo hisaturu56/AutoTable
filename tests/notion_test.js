@@ -69,6 +69,17 @@ const rowsOf = (name, order, image, ...cells) => ({
     assert.deepStrictEqual(t[1].rows, [["武器名", "攻撃力", "サブ"], ["トイハンマー", "420", ""]]);
   });
 
+  await test("表は名前の頭の番号順に並べる（Notion がバラバラの順で返しても）", () => {
+    const t = N.groupTables([
+      rowsOf("4_タフィーの技性能", 1, "", "a"),
+      rowsOf("10_おまけ", 1, "", "a"),
+      rowsOf("番号なし", 1, "", "a"),
+      rowsOf("2_キャラ早見表", 1, "", "a"),
+      rowsOf("01_基礎ステータス比較", 1, "", "a"),
+    ]);
+    assert.deepStrictEqual(t.map((x) => x.name), ["01_基礎ステータス比較", "2_キャラ早見表", "4_タフィーの技性能", "10_おまけ", "番号なし"]);
+  });
+
   // Notion のダミー
   const page = "page1", db = "db1";
   function fake(map) {
