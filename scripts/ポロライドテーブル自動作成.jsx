@@ -203,6 +203,7 @@
         if (!tableName) tableName = "表" + (abIndex + 1);
         layerRoot = doc.layers.add();
         layerRoot.name = uniqueLayerName(tableName);
+        placeTableLayer(layerRoot, abIndex);
     }
     if (!tableName) tableName = "表" + (abIndex + 1);
     doc.artboards[abIndex].name = uniqueArtboardName(tableName, abIndex);
@@ -929,6 +930,43 @@
             doc.selection = null;
             return false;
         }
+    }
+
+    // 表のレイヤーを、アートボードの番号の順に上から並べる（01 の表がいちばん上）
+    // 自分より後ろの番号のアートボードの表があれば、そのすぐ上に。なければ、いちばん下の表のすぐ下に
+    function placeTableLayer(layer, index) {
+        var lastTable = null;
+        for (var i = 0; i < doc.layers.length; i++) {
+            var other = doc.layers[i];
+            if (other === layer) continue;
+            var board = tableArtboardOf(other);
+            if (board < 0) continue;
+            if (board > index) {
+                layer.move(other, ElementPlacement.PLACEBEFORE);
+                return;
+            }
+            lastTable = other;
+        }
+        if (lastTable) layer.move(lastTable, ElementPlacement.PLACEAFTER);
+    }
+
+    // 表のレイヤー（「下地」レイヤーを持つ）のアートボードの番号。表のレイヤーでなければ -1
+    function tableArtboardOf(layer) {
+        var outer = null;
+        try {
+            var sub = layer.layers.getByName(CONFIG.layerNames.outer);
+            if (sub.pageItems.length) outer = sub.pageItems[0];
+        } catch (e) {
+            return -1;
+        }
+        if (!outer) return -1;
+        var b = outer.geometricBounds;
+        var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+        for (var i = 0; i < doc.artboards.length; i++) {
+            var r = doc.artboards[i].artboardRect;
+            if (cx >= r[0] && cx <= r[2] && cy <= r[1] && cy >= r[3]) return i;
+        }
+        return -1;
     }
 
     // アートボードの上にある表（「下地」レイヤーを持つ表のレイヤー）を探す

@@ -320,7 +320,7 @@
     if (source === "notion") {
       var script = currentScript();
       notionTables.forEach(function (t) {
-        if (t.checked) jobs.push({ name: t.name, data: t.rows, tableName: script.title + "_" + t.name, character: t.character });
+        if (t.checked) jobs.push({ name: t.name, data: t.rows, tableName: script.title + "_" + twoDigits(t.name), character: t.character });
       });
       if (!jobs.length) { setStatus(notionTables.length ? "作る表にチェックを入れてください。" : "Notion から読んだ表がありません。"); return; }
     } else if (!csvs.length) {
@@ -508,6 +508,12 @@
       });
       renderNotion("「" + r.db.name + "」に表がありません");
     }).catch(notionFailed);
+  }
+
+  // 表の名前の頭の番号を 2 けたにする（1_基礎ステータス比較 → 01_基礎ステータス比較）
+  //   アートボード名・PNG のファイル名が、フォルダの中で 01、02 … 10 の順に並ぶように
+  function twoDigits(name) {
+    return String(name).replace(/^(\d)(?=\D|$)/, "0$1");
   }
 
   function renderNotion(empty) {
