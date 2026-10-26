@@ -7,6 +7,8 @@
  *   - 「キャラ画像」レイヤーの画像が一覧に出るので、調整したい画像を選ぶ
  *     （先にキャラ画像を選択しておくと、その画像が最初から選ばれた状態になる）
  *   - スライダーか数値で、拡大率・横・縦を変えると、その場で表に反映される
+ *   - 「同じ表の画像を全部この画像と同じにする」で、同じ表のほかのキャラ画像にも同じ拡大率・位置を当てはめる
+ *     （キャラごとに絵が違うので、そのあと 1 枚ずつ微調整する）
  *   - OK で確定、キャンセルで開く前の状態に戻す
  *
  * 拡大率 100% ＝ マスにちょうど隙間なく入る大きさ
@@ -62,6 +64,7 @@
     var fitBtn = tools.add("button", undefined, "マスに合わせる（100%・中央）");
     var topBtn = tools.add("button", undefined, "上ぞろえに戻す");
     var revertBtn = tools.add("button", undefined, "この画像を元に戻す");
+    var copyBtn = dlg.add("button", undefined, "同じ表の画像を全部この画像と同じにする（拡大率・位置）");
 
     var btns = dlg.add("group");
     btns.alignment = "right";
@@ -87,6 +90,24 @@
         var cb = clipBox(tg);
         applyOffset(tg, null, (tg.image.height - cb.h) / 2);  // 画像の上端をマスの上端に合わせる
         refresh();
+    };
+    copyBtn.onClick = function () {
+        var src = targets[current];
+        var zoom = currentZoom(src);
+        var off = currentOffset(src);
+        var srcBox = clipBox(src);
+        var count = 0;
+        for (var i = 0; i < targets.length; i++) {
+            if (i === current || targets[i].layer !== src.layer) continue;
+            // マスの大きさが違うときは、ずれをマスの大きさに合わせて伸び縮みさせる
+            var k = clipBox(targets[i]).w / srcBox.w;
+            applyZoom(targets[i], zoom);
+            applyOffset(targets[i], off.x * k, off.y * k);
+            count++;
+        }
+        selectOnly(src);
+        refresh();
+        if (!count) alert("同じ表に、ほかのキャラ画像がありません。");
     };
     revertBtn.onClick = function () {
         restoreState(targets[current], originals[current]);
@@ -116,6 +137,7 @@
                         group: group,
                         image: group.placedItems[0],
                         clip: group.pathItems[0],
+                        layer: layer,
                         label: (parentName ? parentName + " ／ " : "") + group.name
                     });
                 }
