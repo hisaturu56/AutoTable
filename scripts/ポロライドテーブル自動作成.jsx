@@ -87,6 +87,7 @@
     };
 
     // パネルから呼ばれたときは、パネルの設定を使う（ダイアログは出さない）
+    var TEXT_NOTE = "自動の大きさ:";  // マスの文字の note（自動で決めた pt。作り直すときに、調整した文字の大きさの割合を出すのに使う）
     var panelMode = !!$.global.PT_CREATE_OPTIONS;
     var opts = panelMode ? panelOptions($.global.PT_CREATE_OPTIONS) : showDialog();
     if (!opts) return;
@@ -148,7 +149,7 @@
     }
     if (old) {
         if (!confirm("アートボード " + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」の表を消して、作り直します。\n"
-                + "（調整したキャラ画像や文字の大きさも元に戻ります）\n\nよろしいですか？")) {
+                + "（入れたキャラ画像と、調整した位置・文字の大きさは引き継ぎます）\n\nよろしいですか？")) {
             return;
         }
         var ob = old.outer.geometricBounds;
@@ -164,9 +165,14 @@
     if (!numberFont) missingFonts.push(CONFIG.number.family + " " + CONFIG.number.style);
     var roughTargets = [];
 
+    // 作り直すときは、前の表のキャラ画像と文字の大きさを引き継ぐ
+    //   キャラ画像：「キャラ画像」レイヤーを前の表の外へ出しておき、新しい表のキャラ欄に合わせて縮小・移動する
+    //   文字の大きさ：前の表で自動で決めた大きさから変えた割合を、新しい表にもかける
+    var carried = null;
     if (replaced) {
         old.layer.locked = false;
         old.layer.visible = true;
+        carried = takeOldTable(old.layer);
         old.layer.remove();
     }
 
@@ -224,6 +230,7 @@
     // ---- マスを作る（1マス＝1グループ：長方形・画像・文字） ----
     var cells = [];
     var cellTexts = [];
+    var charBoxes = {};  // 行の番号 → キャラ欄のマス（作り直すときに、前のキャラ画像を合わせる）
     for (var r = 0; r < opts.rows; r++) {
         var top = body.top - r * (cellH + CONFIG.gap);
         var row = data ? data[r] : [];
@@ -232,6 +239,7 @@
             // キャラ画像は表を作るときには入れず、パネルの「調整」タブでまとめて入れる
             // CSV・Notion に書いてあった画像のファイル名は、そのときの初期値にするためにマスのメモ（note）に残す
             var charCell = makeCell("行" + (r + 1) + "_キャラ", top, body.left, cellH, cellH);
+            charBoxes[r + 1] = { left: body.left, top: top, w: cellH, h: cellH };
             if (row[0]) charCell.group.note = String(row[0]).replace(/^.*[\/\\]/, "");
             col = 1;
         }
@@ -245,6 +253,11 @@
     if (templateRect) templateRect.remove();  // 元の「テーブル」の長方形はマス目に置き換える
 
     var textScale = layoutCellTexts(cellTexts, cellH);
+    var carriedImages = 0, carriedText = false;
+    if (carried) {
+        carriedImages = moveCarriedImages(carried, layerRoot, charBoxes);
+        carriedText = applyTextRatio(cellTexts, carried.textRatio);
+    }
 
     var roughFailed = false;
     if (opts.rough) {
@@ -287,7 +300,12 @@
             + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px\n"
             + "文字の大きさ：文字 " + round(CONFIG.text.size * textScale) + " pt ／ 数字 " + round(CONFIG.number.size * textScale) + " pt";
     msg += "\n\nアートボード：" + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」" + (newArtboard ? "（新しく追加）" : "");
-    if (replaced) msg += "（前の表を消して作り直しました）";
+    if (replaced) {
+        msg += "（前の表を消して作り直しました）";
+        if (carriedImages) msg += "\nキャラ画像 " + carriedImages + " 枚を、新しいマスに合わせて引き継ぎました";
+        if (carried && carried.dropped) msg += "\n※キャラ欄がなくなった行のキャラ画像 " + carried.dropped + " 枚は消しました";
+        if (carriedText) msg += "\n調整した文字の大きさを引き継ぎました（前と同じ割合）";
+    }
     if (fitted) msg += "\nアートボードを表に合わせました：" + fitted.w + " × " + fitted.h + " px";
     msg += "\n\n" + (opts.character ? "キャラ画像を調整してから、" : "") + "パネルの「書き出し」で PNG を書き出してください。";
     if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
@@ -707,6 +725,7 @@
             var t = list[j];
             var base = t.isNumber ? CONFIG.number.size : CONFIG.text.size;
             t.tf.textRange.characterAttributes.size = base * scale;
+            t.tf.note = TEXT_NOTE + base * scale;  // 自動で決めた大きさ（作り直すときに、調整した割合を引き継ぐため）
             if (t.isNumber) {
                 // 縦位置はカンマ・小数点を除いた数字だけの形で中央に合わせる
                 alignByGlyphs(t.tf, t.left + t.w / 2, t.top - t.h / 2 - CONFIG.number.offsetY * scale, t.text.replace(/[,.]/g, ""));
@@ -827,6 +846,104 @@
             if (cx >= r[0] && cx <= r[2] && cy <= r[1] && cy >= r[3]) return i;
         }
         return -1;
+    }
+
+    // ---- 作り直すときの引き継ぎ ----
+
+    // 前の表から、キャラ画像（レイヤーごと表の外へ出す）・行ごとのキャラ欄のマス・文字の大きさの割合を取り出す
+    function takeOldTable(layer) {
+        var t = { images: null, boxes: {}, textRatio: 1, dropped: 0 };
+        for (var i = 0; i < layer.layers.length; i++) {
+            var sub = layer.layers[i];
+            if (sub.name === CONFIG.layerNames.table) {
+                for (var g = 0; g < sub.groupItems.length; g++) {
+                    var group = sub.groupItems[g];
+                    var m = /^行(\d+)_キャラ$/.exec(group.name);
+                    var shape = m ? oldCellShape(group) : null;
+                    if (shape) t.boxes[m[1]] = oldCellBox(shape);
+                    if (t.textRatio === 1) {
+                        for (var k = 0; k < group.textFrames.length; k++) {
+                            var tf = group.textFrames[k];
+                            var auto = tf.note.indexOf(TEXT_NOTE) === 0 ? parseFloat(tf.note.substr(TEXT_NOTE.length)) : NaN;
+                            if (auto > 0) { t.textRatio = tf.textRange.characterAttributes.size / auto; break; }
+                        }
+                    }
+                }
+            }
+        }
+        var img = null;
+        try { img = layer.layers.getByName(CONFIG.layerNames.image); } catch (e) { img = null; }
+        if (img && img.groupItems.length) {
+            img.locked = false;
+            img.visible = true;
+            img.move(layer, ElementPlacement.PLACEBEFORE);  // 前の表を消しても残るように、表の外へ出す
+            t.images = img;
+        } else if (img) {
+            img.remove();
+        }
+        return t;
+    }
+
+    // マスのグループの中の、文字ではない最初のもの（ラフを固定・画像にすると長方形ではなくなることがある）
+    function oldCellShape(group) {
+        for (var i = 0; i < group.pageItems.length; i++) {
+            if (group.pageItems[i].typename !== "TextFrame") return group.pageItems[i];
+        }
+        return null;
+    }
+
+    // マスの { left, top, w, h }。ラフを固定したマスはギザギザの分だけ内側にする（panel/host.jsx の cellBox と同じ）
+    function oldCellBox(shape) {
+        var b = shape.geometricBounds;
+        var inset = 0;
+        try {
+            if (shape.typename !== "PathItem" || shape.pathPoints.length > 4) inset = CONFIG.rough.size;
+        } catch (e) {}
+        return { left: b[0] + inset, top: b[1] - inset, w: b[2] - b[0] - inset * 2, h: b[1] - b[3] - inset * 2 };
+    }
+
+    // 前のキャラ画像を、新しい表の同じ行のキャラ欄に合わせて縮小・移動する（マスの中での位置・拡大はそのまま）
+    // 新しい表にその行のキャラ欄がなければ消す。合わせた枚数を返す
+    function moveCarriedImages(t, parent, boxes) {
+        if (!t.images) return 0;
+        var layer = t.images, count = 0;
+        for (var i = layer.groupItems.length - 1; i >= 0; i--) {
+            var g = layer.groupItems[i];
+            var m = /^行(\d+)_/.exec(g.name);
+            var from = m ? t.boxes[m[1]] : null, to = m ? boxes[m[1]] : null;
+            if (!from || !to || !(from.w > 0)) {
+                g.remove();
+                t.dropped++;
+                continue;
+            }
+            // マスの左上を基準に s 倍する：新しい位置 ＝ 新しいマスの左上 ＋（前のマスの左上からのずれ）× s
+            var s = to.w / from.w;
+            var p0 = g.position;
+            if (Math.abs(s - 1) > 0.00001) g.resize(s * 100, s * 100, true, true, true, true, s * 100, Transformation.CENTER);
+            var p1 = g.position;
+            g.translate(to.left + (p0[0] - from.left) * s - p1[0], to.top + (p0[1] - from.top) * s - p1[1]);
+            count++;
+        }
+        if (!layer.groupItems.length) {
+            layer.remove();
+        } else if (parent !== doc) {
+            layer.move(parent, ElementPlacement.PLACEATBEGINNING);  // 新しい表のレイヤーの中のいちばん上へ
+        }
+        return count;
+    }
+
+    // 前の表で文字の大きさを変えていれば、同じ割合を新しい表の文字にもかける（マスの中央は保つ）
+    function applyTextRatio(list, ratio) {
+        if (!(ratio > 0) || Math.abs(ratio - 1) < 0.001) return false;
+        for (var i = 0; i < list.length; i++) {
+            var t = list[i];
+            var cx = t.left + t.w / 2, cy = t.top - t.h / 2;
+            var a = t.tf.anchor;
+            t.tf.textRange.characterAttributes.size = t.tf.textRange.characterAttributes.size * ratio;
+            // 文字は基準点を中心に大きくなるので、マスの中心とのずれが変わった分を戻す（panel/host.jsx の setTextSize と同じ）
+            t.tf.translate((cx - a[0]) * (1 - ratio), (cy - a[1]) * (1 - ratio));
+        }
+        return true;
     }
 
     // アートボードの上にある表（「下地」レイヤーを持つ表のレイヤー）を探す
