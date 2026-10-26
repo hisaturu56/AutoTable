@@ -120,34 +120,39 @@
 
     <fieldset>
       <legend>オプション</legend>
-      <label class="c"><input type="checkbox" id="rough">ラフ効果をかける</label>
-      <label class="c"><input type="checkbox" id="fixRough">ラフを固定する（画面が軽くなる）</label>
       <label class="c"><input type="checkbox" id="fitArtboard">アートボードを表にぴったり合わせる</label>
       <label class="c"><input type="checkbox" id="overwrite">同じ名前の表があれば作り直す（上書き）</label>
       <div class="note">同じ名前（Notion は「台本タイトル_表の名前」、CSV はファイル名）のアートボードの表を消して、同じ位置に作り直します（空の表のときは、今のアートボードの表）</div>
-      <div class="note">PNG の書き出しは「書き出し」タブで行います</div>
+      <div class="note">表はラフなしで作ります（軽く作業できるように）。仕上げに「調整」タブの「ラフをかけて仕上げる」を押し、「書き出し」タブで PNG にします</div>
     </fieldset>
 
     <button id="createBtn" class="wide main">表を作る</button>
   </section>
 
-  <!-- ================= 調整（文字の大きさ・キャラ画像） ================= -->
+  <!-- ================= 調整（チェックした表にまとめて・キャラ画像の位置は 1 枚ずつ） ================= -->
   <section id="images">
-    <div class="row"><label class="k">アートボード</label><select id="board"></select></div>
-    <div class="grid2">
-      <button id="imgReload">一覧を更新</button>
-      <button id="fixRoughBtn" title="前のバージョンで作った表など、ラフが重いときに">この表のラフを固定</button>
-    </div>
+    <fieldset>
+      <legend>対象の表（チェックした表にまとめて）</legend>
+      <div id="adjBoards" class="list"></div>
+      <div class="grid2" style="grid-template-columns: 1fr 1fr 1fr;">
+        <button id="adjAll">全部選ぶ</button>
+        <button id="adjNone">全部外す</button>
+        <button id="imgReload">一覧を更新</button>
+      </div>
+    </fieldset>
+
+    <button id="imgBulk" class="wide">キャラ画像をまとめて入れる・変える…</button>
+    <button id="finishBtn" class="wide main">ラフをかけて仕上げる</button>
+    <div class="note">下地・ヘッダー・マスにラフをかけて、表ごとに 1 枚の画像にします（画面が軽くなる。見た目は書き出す PNG と同じ）。そのあとマスの形・色を変えるときは、作り直しで</div>
 
     <fieldset>
-      <legend>文字の大きさ（この表の文字すべて）</legend>
+      <legend>文字の大きさ（チェックした表の文字すべて）</legend>
       <div class="row"><label class="k">文字 pt</label><input type="range" id="textR" min="10" max="80" step="0.5"><input type="number" id="textN" step="any"></div>
       <div class="row"><span id="textNote" class="note"></span></div>
     </fieldset>
 
     <fieldset id="imageBox">
-      <legend>キャラ画像</legend>
-      <button id="imgBulk" class="wide main">キャラ画像をまとめて入れる・変える…</button>
+      <legend>キャラ画像の位置（1 枚ずつ）</legend>
       <div class="row"><label class="k">画像</label><select id="image"></select></div>
       <button id="imgFromSel" class="wide">Illustrator で選択中の画像にする</button>
       <div class="row"><label class="k">拡大率 %</label><input type="range" id="zoomR" min="100" max="400" step="1"><input type="number" id="zoomN" step="any"></div>
@@ -192,7 +197,7 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var DEFAULTS = { rows: 6, cols: 5, character: true, x: 960, y: 540, w: 1505, h: 592.5, wr: 0, hr: 0,
-                   rough: true, fixRough: true, fitArtboard: true, overwrite: true };
+                   fitArtboard: true, overwrite: true };
   var RATIOS = [
     { label: "100%（そのまま）", value: 1 },
     { label: "67%（3分の2）", value: 2 / 3 },
@@ -266,11 +271,11 @@
     $("hr").add(new Option(RATIOS[r].label, r));
   }
   ["x", "y", "w", "h", "wr", "hr"].forEach(function (k) { $(k).value = form[k]; });
-  ["rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) { $(k).checked = !!form[k]; });
+  ["fitArtboard", "overwrite"].forEach(function (k) { $(k).checked = !!form[k]; });
   updateCSV();
   updateSize();
 
-  ["x", "y", "w", "h", "wr", "hr", "rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) {
+  ["x", "y", "w", "h", "wr", "hr", "fitArtboard", "overwrite"].forEach(function (k) {
     $(k).addEventListener("input", saveForm);
     $(k).addEventListener("change", saveForm);
   });
@@ -305,7 +310,7 @@
     var h = parseFloat($("h").value) * RATIOS[$("hr").value].value;
     var base = {
       x: $("x").value, y: $("y").value, w: w, h: h,
-      rough: $("rough").checked, fixRough: $("fixRough").checked, fitArtboard: $("fitArtboard").checked,
+      rough: false, fixRough: false, fitArtboard: $("fitArtboard").checked,
       overwrite: $("overwrite").checked
     };
     var jobs = [];
@@ -551,61 +556,134 @@
   function saveForm() {
     var f = {};
     ["x", "y", "w", "h", "wr", "hr"].forEach(function (k) { f[k] = $(k).value; });
-    ["rough", "fixRough", "fitArtboard", "overwrite"].forEach(function (k) { f[k] = $(k).checked; });
+    ["fitArtboard", "overwrite"].forEach(function (k) { f[k] = $(k).checked; });
     save("create", f);
   }
 
-  // ---------------- 調整（文字の大きさ・キャラ画像） ----------------
+  // ---------------- 調整（チェックした表にまとめて・キャラ画像の位置は 1 枚ずつ） ----------------
 
-  var imageData = { boards: [], images: [] };
+  var imageData = { boards: [], images: [], empties: [] };
   var imageId = -1;
-  var currentBoard = -1;
+  var emptyId = -1;
+  var checked = {};  // { アートボードの番号: true }（対象の表）
 
-  // アートボードを切り替える（画像の一覧と文字の大きさも読み直す）
-  function setBoard(board) {
-    currentBoard = board;
-    $("board").value = board;
-    fillImageList(board);
+  function checkedBoards() {
+    var list = [];
+    imageData.boards.forEach(function (b) { if (checked[b.index]) list.push(b.index); });
+    return list;
+  }
+
+  // 対象の表のチェックボックス（アートボードの順）
+  function renderAdjBoards() {
+    var box = $("adjBoards");
+    box.innerHTML = "";
+    if (!imageData.boards.length) { box.innerHTML = '<div class="note">ドキュメントが開いていません</div>'; return; }
+    imageData.boards.forEach(function (b) {
+      var label = document.createElement("label");
+      label.className = "c";
+      var check = document.createElement("input");
+      check.type = "checkbox";
+      check.checked = !!checked[b.index];
+      check.addEventListener("change", function () {
+        if (check.checked) checked[b.index] = true; else delete checked[b.index];
+        boardsChanged();
+      });
+      label.appendChild(check);
+      label.appendChild(document.createTextNode((b.index + 1) + "：" + b.name));
+      box.appendChild(label);
+    });
+  }
+
+  function boardsChanged() {
+    fillImageList();
     loadText();
   }
 
-  // ラフを固定する（「アピアランスを分割」。画面を軽くする）
-  $("fixRoughBtn").addEventListener("click", function () {
-    if (currentBoard < 0) return;
-    busy(true, "ラフを固定しています…");
-    call("PT.fixRough(" + currentBoard + ")", function (r) {
+  $("adjAll").addEventListener("click", function () {
+    imageData.boards.forEach(function (b) { checked[b.index] = true; });
+    renderAdjBoards();
+    boardsChanged();
+  });
+  $("adjNone").addEventListener("click", function () {
+    checked = {};
+    renderAdjBoards();
+    boardsChanged();
+  });
+
+  // チェックした表に 1 つずつ順に頼む（Illustrator の処理は同時に 1 つずつ）
+  //   each(board, done)：1 つ分の処理。done(結果) で次へ。finish(結果の配列)：全部終わったら
+  function eachBoard(each, finish) {
+    var boards = checkedBoards(), results = [];
+    if (!boards.length) { setStatus("対象の表にチェックを入れてください。"); return; }
+    (function next(i) {
+      if (i >= boards.length) { finish(results, boards); return; }
+      each(boards[i], function (r) { results.push(r); next(i + 1); });
+    })(0);
+  }
+
+  // ---- ラフをかけて仕上げる ----
+  $("finishBtn").addEventListener("click", function () {
+    busy(true, "ラフをかけて仕上げています…");
+    eachBoard(function (board, done) {
+      setStatus("ラフをかけて仕上げています…（" + (board + 1) + "：" + boardName(board) + "）");
+      call("PT.finishTable(" + board + ")", done);
+    }, function (results, boards) {
       busy(false);
-      if (r) setStatus(r.count ? "ラフを固定しました（" + r.count + " 個）。元に戻すときは Ctrl+Z" : "この表に、固定するラフがありません。");
+      var done = 0, already = [], none = [];
+      results.forEach(function (r, i) {
+        if (r && r.done) done++;
+        else if (r && r.already) already.push(boardName(boards[i]));
+        else none.push(boardName(boards[i]));
+      });
+      setStatus(done + " 個の表を仕上げました。" + (already.length ? "\nもう仕上げてある表：" + already.join("、") : "")
+              + (none.length ? "\n表が見つからなかったアートボード：" + none.join("、") : ""));
       loadText();
     });
   });
 
-  // ---- 文字の大きさ ----
+  function boardName(board) {
+    for (var i = 0; i < imageData.boards.length; i++) if (imageData.boards[i].index === board) return imageData.boards[i].name;
+    return String(board + 1);
+  }
+
+  // ---- 文字の大きさ（チェックした表すべて。表示はいちばん上の表の大きさ） ----
 
   function loadText() {
-    if (currentBoard < 0) return;
-    call("PT.getTextSize(" + currentBoard + ")", showText);
+    var boards = checkedBoards();
+    if (!boards.length) { showText(null); return; }
+    call("PT.getTextSize(" + boards[0] + ")", showText);
   }
 
   function showText(v) {
     var has = v && v.count > 0;
     $("textR").disabled = $("textN").disabled = !has;
-    if (!has) { $("textNote").textContent = "この表には文字がありません"; return; }
+    if (!has) { $("textNote").textContent = checkedBoards().length ? "この表には文字がありません" : "対象の表にチェックを入れてください"; return; }
     if (!textDragging) $("textR").value = v.text;
     $("textN").value = round(v.text);
-    $("textNote").textContent = "数字は " + round(v.number) + " pt（文字の 46/40 倍）。" + v.count + " 個の文字をまとめて変えます";
+    var n = checkedBoards().length;
+    $("textNote").textContent = "数字は " + round(v.number) + " pt（文字の 46/40 倍）。" + (n > 1 ? "チェックした " + n + " 個の表の文字をまとめて変えます" : v.count + " 個の文字をまとめて変えます");
   }
 
   var textDragging = false, textSending = false, textPending = null;
   function sendText(pt) {
-    if (currentBoard < 0 || !(pt > 0)) return;
+    if (!(pt > 0)) return;
     if (textSending) { textPending = pt; return; }
+    var boards = checkedBoards();
+    if (!boards.length) return;
     textSending = true;
-    call("PT.setTextSize(" + currentBoard + ", " + arg(pt) + ")", function (v) {
-      textSending = false;
-      showText(v);
-      if (textPending !== null) { var p = textPending; textPending = null; sendText(p); }
-    });
+    var first = null;
+    (function next(i) {
+      if (i >= boards.length) {
+        textSending = false;
+        showText(first);
+        if (textPending !== null) { var p = textPending; textPending = null; sendText(p); }
+        return;
+      }
+      call("PT.setTextSize(" + boards[i] + ", " + arg(pt) + ")", function (v) {
+        if (i === 0) first = v;
+        next(i + 1);
+      });
+    })(0);
   }
   $("textR").addEventListener("input", function () { textDragging = true; sendText(parseFloat(this.value)); });
   $("textR").addEventListener("change", function () { textDragging = false; });
@@ -618,22 +696,18 @@
     call("PT.listImages()", function (data) {
       if (!data) return;
       imageData = data;
-      var board = $("board");
-      board.innerHTML = "";
-      data.boards.forEach(function (b) { board.add(new Option((b.index + 1) + "：" + b.name, b.index)); });
-      if (!data.boards.length) { setStatus("ドキュメントが開いていません。"); return; }
-      // 選ぶ画像：選択中の画像 → 今選んでいる画像 → 今のアートボードの最初の画像
+      if (!data.empties) data.empties = [];
+      // チェックは、なくなったアートボードの分だけ外す。何もチェックがなければ今のアートボード
+      var kept = {};
+      data.boards.forEach(function (b) { if (checked[b.index]) kept[b.index] = true; });
+      checked = kept;
+      if (!checkedBoards().length && data.active >= 0) checked[data.active] = true;
       var id = preferSelection && data.selected >= 0 ? data.selected : findImage(imageId) ? imageId : -1;
-      if (id < 0) {
-        for (var i = 0; i < data.images.length && id < 0; i++) if (data.images[i].board === data.active) id = data.images[i].id;
-      }
-      if (id >= 0) {
-        currentBoard = -1;  // 画像のアートボードに合わせて読み直す
-        selectImage(id, false);
-      } else {
-        imageId = -1;
-        setBoard(currentBoard >= 0 && currentBoard < data.boards.length ? currentBoard : data.active);
-      }
+      if (id >= 0) checked[findImage(id).board] = true;
+      renderAdjBoards();
+      imageId = id;
+      boardsChanged();
+      if (id >= 0) selectImage(id, false);
     });
   }
 
@@ -642,38 +716,41 @@
     return null;
   }
 
-  // 画像を選ぶ（アートボードと画像の一覧も合わせる）。selectInIllustrator なら Illustrator でも選択する
+  // 画像を選ぶ。selectInIllustrator なら Illustrator でも選択する
   function selectImage(id, selectInIllustrator) {
     var img = findImage(id);
     if (!img) return;
     imageId = id;
     emptyId = -1;
-    if (img.board !== currentBoard) setBoard(img.board);
     $("image").value = id;
     setImageControls("image");
     if (selectInIllustrator) call("PT.selectImage(" + id + ")");
     call("PT.getImage(" + id + ")", showValues);
   }
 
-  function fillImageList(board) {
+  // 対象の表の画像（と、画像を入れなかったキャラ欄）を一覧にする。名前の前はアートボードの番号
+  function fillImageList() {
     var list = $("image");
     list.innerHTML = "";
     imageData.images.forEach(function (img) {
-      if (img.board === board) list.add(new Option(img.name, img.id));
+      if (checked[img.board]) list.add(new Option((img.board + 1) + "：" + img.name, img.id));
     });
-    // 画像を入れなかったキャラ欄（あとから「画像を入れる…」で入れられる）
-    (imageData.empties || []).forEach(function (e) {
-      if (e.board === board) list.add(new Option(e.name, "e" + e.id));
+    imageData.empties.forEach(function (e) {
+      if (checked[e.board]) list.add(new Option((e.board + 1) + "：" + e.name, "e" + e.id));
     });
     var has = list.options.length > 0;
-    if (!has) {
-      imageId = -1;
-      list.add(new Option("（この表にキャラ欄はありません）", -1));
-    }
-    setImageControls(has && imageId >= 0 ? "image" : has ? "empty" : "none");
-    if (imageId < 0 && has) {  // 画像がまだない表なら、最初の画像なしのマスを選んでおく
+    if (!has) list.add(new Option("（対象の表にキャラ欄はありません）", -1));
+    if (has && findImage(imageId) && checked[findImage(imageId).board]) {
+      list.value = imageId;
+      setImageControls("image");
+    } else if (has) {
       var first = list.options[0].value;
       if (String(first).charAt(0) === "e") selectEmpty(parseInt(first.slice(1), 10));
+      else selectImage(parseInt(first, 10), false);
+    } else {
+      imageId = -1;
+      emptyId = -1;
+      setImageControls("none");
     }
   }
 
@@ -681,21 +758,13 @@
   function setImageControls(mode) {
     var controls = $("imageBox").querySelectorAll("input, button");
     for (var i = 0; i < controls.length; i++) {
-      if (controls[i].id !== "imgFromSel" && controls[i].id !== "imgAdd" && controls[i].id !== "imgBulk") controls[i].disabled = mode !== "image";
+      if (controls[i].id !== "imgFromSel" && controls[i].id !== "imgAdd") controls[i].disabled = mode !== "image";
     }
     $("image").disabled = mode === "none";
     $("imgAdd").style.display = mode === "empty" ? "" : "none";
-    $("imgBulk").disabled = mode === "none";
-  }
-
-  function findEmpty(id) {
-    var list = imageData.empties || [];
-    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
-    return null;
   }
 
   // 画像なしのマスを選ぶ（「画像を入れる…」だけ使える）
-  var emptyId = -1;
   function selectEmpty(id) {
     imageId = -1;
     emptyId = id;
@@ -703,40 +772,23 @@
     setImageControls("empty");
   }
 
-  $("board").addEventListener("change", function () {
-    var board = parseInt(this.value, 10);
-    setBoard(board);
-    var first = null;
-    imageData.images.forEach(function (img) { if (first === null && img.board === board) first = img.id; });
-    if (first !== null) selectImage(first, true);
-    else {
-      var e = null;
-      (imageData.empties || []).forEach(function (x) { if (e === null && x.board === board) e = x.id; });
-      if (e !== null) selectEmpty(e);
-    }
-  });
   $("image").addEventListener("change", function () {
     if (String(this.value).charAt(0) === "e") selectEmpty(parseInt(this.value.slice(1), 10));
     else selectImage(parseInt(this.value, 10), true);
   });
-  // この表のキャラ欄に、画像をまとめて入れる・変える（Illustrator の画面で選ぶ）
+
+  // チェックした表のキャラ欄に、画像をまとめて入れる・変える（表ごとに Illustrator の画面が順に出る）
   $("imgBulk").addEventListener("click", function () {
-    if (currentBoard < 0) return;
-    var board = currentBoard;
-    call("PT.bulkImages(" + board + ")", function (r) {
-      if (!r) return;  // キャンセル
-      if (r.none) { setStatus("この表にはキャラ欄がありません。"); return; }
-      setStatus("キャラ画像を " + r.placed + " 枚入れました" + (r.removed ? "（前の画像を " + r.removed + " 枚外しました）" : "") + "。");
-      call("PT.listImages()", function (data) {
-        if (!data) return;
-        imageData = data;
-        imageId = -1;
-        currentBoard = -1;
-        var first = null;
-        data.images.forEach(function (img) { if (first === null && img.board === board) first = img.id; });
-        if (first !== null) selectImage(first, false);
-        else setBoard(board);
+    var placed = 0, removed = 0;
+    eachBoard(function (board, done) {
+      call("PT.bulkImages(" + board + ")", function (r) {
+        if (r && !r.none) { placed += r.placed; removed += r.removed; }
+        done(r);
       });
+    }, function () {
+      setStatus("キャラ画像を " + placed + " 枚入れました" + (removed ? "（前の画像を " + removed + " 枚外しました）" : "") + "。");
+      imageId = -1;
+      loadImages(false);
     });
   });
 
@@ -746,18 +798,25 @@
     call("PT.addImage(" + emptyId + ")", function (r) {
       if (!r) return;
       setStatus("画像を入れました：" + r.name + (r.logo ? "（1 行目なので、切り抜かずにマスに収めました）" : ""));
-      var board = currentBoard;
+      var board = findEmptyBoard(emptyId);
       call("PT.listImages()", function (data) {
         if (!data) return;
         imageData = data;
+        if (!data.empties) data.empties = [];
         var id = -1;
         data.images.forEach(function (img) { if (img.board === board && img.name === r.name) id = img.id; });
-        currentBoard = -1;
+        imageId = id;
+        fillImageList();
         if (id >= 0) selectImage(id, true);
-        else setBoard(board);
       });
     });
   });
+
+  function findEmptyBoard(id) {
+    for (var i = 0; i < imageData.empties.length; i++) if (imageData.empties[i].id === id) return imageData.empties[i].board;
+    return -1;
+  }
+
   $("imgFromSel").addEventListener("click", function () { loadImages(true); });
   $("imgReload").addEventListener("click", function () { loadImages(false); });
 
@@ -829,6 +888,7 @@
       if (!r) return;
       var img = findImage(imageId);
       if (img) img.name = r.name;
+      fillImageList();
       selectImage(imageId, false);
       setStatus("画像を差し替えました：" + r.name);
     });
