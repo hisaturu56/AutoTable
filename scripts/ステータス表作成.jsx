@@ -66,6 +66,7 @@
             valign: "top"              // キャラ画像をマスに合わせる位置："top"（顔が見えやすい）／"center"
         },
 
+        defaultFitArtboard: true,      // ダイアログの初期値：アートボードを表にぴったり合わせる
         defaultExport: true            // ダイアログの初期値：PNG で書き出す
     };
 
@@ -181,14 +182,19 @@
     for (var s = 0; s < roughTargets.length; s++) roughTargets[s].selected = true;
     app.redraw();
 
+    var fitted = null;
+    if (opts.fitArtboard) {
+        fitted = fitArtboardToTable([outerRect, headerRect].concat(cells), opts.rough && !roughFailed);
+    }
     var exported = null;
     if (opts.exportPNG) {
-        exported = exportTablePNG(outerRect ? [outerRect] : cells, opts.csvFile);
+        exported = exportPNG(opts.csvFile);
     }
 
     var msg = "ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
             + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? "、ラフあり" : "、ラフなし") + "）\n"
             + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px";
+    if (fitted) msg += "\n\nアートボードを表に合わせました：" + fitted.w + " × " + fitted.h + " px";
     if (exported) msg += "\n\nPNG を書き出しました：\n" + exported.fsName;
     if (missingFonts.length) msg += "\n\n※次のフォントが見つからないため、既定のフォントを使いました：\n" + missingFonts.join("\n");
     if (missingImages.length) msg += "\n\n※見つからなかった画像：\n" + missingImages.join("\n");
@@ -253,7 +259,9 @@
         charCheck.value = CONFIG.defaultCharacter;
         var roughCheck = optPanel.add("checkbox", undefined, "ラフ効果をかける（手描き風のギザギザ）");
         roughCheck.value = CONFIG.rough.enabled;
-        var exportCheck = optPanel.add("checkbox", undefined, "作成後に表の部分を PNG で書き出す");
+        var fitCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを表にぴったり合わせる（ラフのはみ出しも含む）");
+        fitCheck.value = CONFIG.defaultFitArtboard;
+        var exportCheck = optPanel.add("checkbox", undefined, "作成後、アートボードを PNG で書き出す（背景透過）");
         exportCheck.value = CONFIG.defaultExport;
 
         var btns = dlg.add("group");
@@ -305,6 +313,7 @@
             cols: cols,
             character: charCheck.value,
             rough: roughCheck.value,
+            fitArtboard: fitCheck.value,
             exportPNG: exportCheck.value
         };
     }
@@ -541,34 +550,44 @@
         return new File(opts.csvFile.parent.fsName + "/" + path);
     }
 
-    // 表の部分だけを PNG で書き出す（一時的に表ぴったりのアートボードを作る）
-    function exportTablePNG(items, csvFile) {
+    // アートボードを表（下地・ヘッダー・マス）にぴったり合わせる
+    // ラフのはみ出しも含め、端がぼやけないよう外側に向けて整数の px にそろえる
+    function fitArtboardToTable(items, roughApplied) {
+        var vb = null;
+        for (var k = 0; k < items.length; k++) {
+            if (!items[k]) continue;
+            var b = items[k].visibleBounds;
+            vb = vb ? [Math.min(vb[0], b[0]), Math.max(vb[1], b[1]), Math.max(vb[2], b[2]), Math.min(vb[3], b[3])] : b;
+        }
+        if (!vb) return null;
+
+        // 見た目の範囲（visibleBounds）にラフのはみ出しが含まれていないときは、ラフの大きさの分だけ広げる
+        var pad = 0;
+        if (roughApplied && roughTargets.length) {
+            var g = roughTargets[0].geometricBounds, v = roughTargets[0].visibleBounds;
+            var same = Math.abs(g[0] - v[0]) < 0.01 && Math.abs(g[1] - v[1]) < 0.01
+                    && Math.abs(g[2] - v[2]) < 0.01 && Math.abs(g[3] - v[3]) < 0.01;
+            if (same) pad = CONFIG.rough.size;
+        }
+        var rect = [Math.floor(vb[0] - pad), Math.ceil(vb[1] + pad), Math.ceil(vb[2] + pad), Math.floor(vb[3] - pad)];
+        doc.artboards[abIndex].artboardRect = rect;
+        return { w: rect[2] - rect[0], h: rect[1] - rect[3] };
+    }
+
+    // アクティブなアートボードを背景透過の PNG で書き出す
+    function exportPNG(csvFile) {
         var defaultName = csvFile ? decodeURI(csvFile.name).replace(/\.csv$/i, "") + ".png" : "ステータス表.png";
         var dest = (csvFile ? new File(csvFile.parent.fsName + "/" + defaultName) : new File(defaultName)).saveDlg("PNG の保存先", "*.png");
         if (!dest) return null;
 
-        var vb = items[0].visibleBounds;  // ラフで少しはみ出す分も含める
-        for (var k = 1; k < items.length; k++) {
-            var b = items[k].visibleBounds;
-            vb = [Math.min(vb[0], b[0]), Math.max(vb[1], b[1]), Math.max(vb[2], b[2]), Math.min(vb[3], b[3])];
-        }
-        var rect = [Math.floor(vb[0]), Math.ceil(vb[1]), Math.ceil(vb[2]), Math.floor(vb[3])];
-        var tmp = doc.artboards.add(rect);
-        var tmpIndex = doc.artboards.length - 1;
-        doc.artboards.setActiveArtboardIndex(tmpIndex);
-
+        doc.artboards.setActiveArtboardIndex(abIndex);
         var o = new ExportOptionsPNG24();
         o.antiAliasing = true;
         o.transparency = true;
         o.artBoardClipping = true;
         o.horizontalScale = 100;
         o.verticalScale = 100;
-        try {
-            doc.exportFile(dest, ExportType.PNG24, o);
-        } finally {
-            doc.artboards.setActiveArtboardIndex(abIndex);
-            tmp.remove();
-        }
+        doc.exportFile(dest, ExportType.PNG24, o);
         return dest;
     }
 
