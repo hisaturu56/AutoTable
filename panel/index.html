@@ -169,6 +169,7 @@
         <button id="imgTop">上ぞろえ</button>
       </div>
       <button id="imgCopy" class="wide">同じ表の画像を全部この画像と同じにする</button>
+      <button id="imgCopyAll" class="wide">チェックした表の画像を全部同じにする</button>
       <button id="imgReplace" class="wide">画像を差し替える…</button>
       <button id="imgAdd" class="wide main" style="display:none">画像を入れる…</button>
       <div class="note">Illustrator で画像をクリックしてからパネルに戻ると、その画像に切り替わります</div>
@@ -906,6 +907,15 @@
     if (imageId < 0) return;
     call("PT.copyToTable(" + imageId + ")", function (r) {
       setStatus(r && r.count ? "同じ表の " + r.count + " 枚を、この画像と同じにしました。" : "同じ表に、ほかのキャラ画像がありません。");
+    });
+  });
+  $("imgCopyAll").addEventListener("click", function () {
+    if (imageId < 0) return;
+    var boards = checkedBoards();
+    if (!boards.length) { setStatus("上の「対象の表」で、そろえたい表にチェックを入れてください。"); return; }
+    call("PT.copyToTable(" + imageId + ", [" + boards.join(",") + "])", function (r) {
+      setStatus(r && r.count ? "チェックした表（" + boards.length + " 個）の " + r.count + " 枚を、この画像と同じにしました。"
+                             : "チェックした表に、ほかのキャラ画像がありません。");
     });
   });
   $("imgReplace").addEventListener("click", function () {

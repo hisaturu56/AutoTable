@@ -594,7 +594,8 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
     }
 
     // 同じ表のほかのキャラ画像を、この画像と同じ拡大率・位置にする
-    function copyToTable(id) {
+    //   boards（アートボードの番号の配列）を渡すと、同じ表ではなく、そのアートボードの表の画像を全部同じにする
+    function copyToTable(id, boards) {
         var doc = activeDoc();
         var targets = collectTargets(doc);
         var src = targets[id];
@@ -602,7 +603,8 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         var zoom = currentZoom(src), off = currentOffset(src), srcBox = clipBox(src);
         var count = 0;
         for (var i = 0; i < targets.length; i++) {
-            if (i === id || targets[i].layer !== src.layer) continue;
+            if (i === id) continue;
+            if (boards ? indexOf(boards, artboardOf(doc, targets[i])) < 0 : targets[i].layer !== src.layer) continue;
             var k = clipBox(targets[i]).w / srcBox.w;  // マスの大きさが違うときは、ずれを伸び縮みさせる
             applyZoom(targets[i], zoom);
             applyOffset(targets[i], off.x * k, off.y * k);
