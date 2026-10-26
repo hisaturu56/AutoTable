@@ -17,11 +17,14 @@
  */
 (function () {
     var CONFIG = {
-        // サイズと位置はイラレの表示と同じ値（基準点＝中心、Y はアートボードの上端から下向き）
-        outer:  { w: 1505, h: 592.5, x: 960, y: 515 },      // 下地
-        header: { w: 1490, h: 30,    x: 960, y: 241.25 },   // ヘッダー
-        body:   { w: 1490, h: 540,   x: 960, y: 533.75 },   // テーブル（マス目になる範囲）
+        // 表全体（下地）の位置と大きさの初期値。実行時のダイアログで変えられる
+        // イラレの表示と同じ値（基準点＝中心、Y はアートボードの上端から下向き）
+        layout: { x: 960, y: 515, w: 1505, h: 592.5 },
+        // ヘッダーとテーブルは下地から自動で計算する（初期値なら ヘッダー 1490×30、テーブル 1490×540）
+        headerHeight: 30,
+        margin: 7.5,                   // 下地のフチからヘッダー・テーブルまでの余白、ヘッダーとテーブルの間
         gap: 7.5,                      // マス同士の間隔
+        settingsFile: Folder.userData + "/PolaroidTable_layout.txt",  // 前回入力した値を覚えておくファイル
 
         // このレイヤーがドキュメントにあれば、その長方形を使う（「テーブル」の長方形をマス目に加工する）
         layerNames: { outer: "下地", header: "ヘッダー", table: "テーブル" },
@@ -109,15 +112,16 @@
     }
 
     // 下から 下地 → ヘッダー → テーブル の順に重なるように作る
-    var outerRect  = existingOrNewRect(CONFIG.layerNames.outer, CONFIG.outer, CONFIG.colors.outer);
-    var headerRect = existingOrNewRect(CONFIG.layerNames.header, CONFIG.header, CONFIG.colors.header);
+    var specs = layoutSpecs(opts.layout);
+    var outerRect  = existingOrNewRect(CONFIG.layerNames.outer, specs.outer, CONFIG.colors.outer);
+    var headerRect = existingOrNewRect(CONFIG.layerNames.header, specs.header, CONFIG.colors.header);
     var body;
     if (templateRect) {
         body = boundsToBox(templateRect.geometricBounds);
     } else {
         tableLayer = doc.layers.add();
         tableLayer.name = CONFIG.layerNames.table;
-        body = specToBox(CONFIG.body);
+        body = specToBox(specs.body);
     }
 
 
@@ -217,6 +221,32 @@
         colsInput.characters = 4;
         g2.add("statictext", undefined, "（キャラ欄を除く）");
 
+        var layoutPanel = dlg.add("panel", undefined, "表全体（下地）の位置と大きさ（px・基準点は中心）");
+        layoutPanel.alignChildren = "left";
+        var saved = loadLayout();
+        var g4 = layoutPanel.add("group");
+        g4.add("statictext", undefined, "X：");
+        var xInput = g4.add("edittext", undefined, String(saved.x));
+        xInput.characters = 7;
+        g4.add("statictext", undefined, "Y：");
+        var yInput = g4.add("edittext", undefined, String(saved.y));
+        yInput.characters = 7;
+        var g5 = layoutPanel.add("group");
+        g5.add("statictext", undefined, "幅：");
+        var wInput = g5.add("edittext", undefined, String(saved.w));
+        wInput.characters = 7;
+        g5.add("statictext", undefined, "高さ：");
+        var hInput = g5.add("edittext", undefined, String(saved.h));
+        hInput.characters = 7;
+        var resetBtn = layoutPanel.add("button", undefined, "初期値に戻す");
+        layoutPanel.add("statictext", undefined, "※ 下地・ヘッダー・テーブルがすでにあるときは、そちらの位置を使います");
+        resetBtn.onClick = function () {
+            xInput.text = String(CONFIG.layout.x);
+            yInput.text = String(CONFIG.layout.y);
+            wInput.text = String(CONFIG.layout.w);
+            hInput.text = String(CONFIG.layout.h);
+        };
+
         var optPanel = dlg.add("panel", undefined, "オプション");
         optPanel.alignChildren = "left";
         var charCheck = optPanel.add("checkbox", undefined, "左端にキャラ欄（正方形）を入れる");
@@ -254,7 +284,22 @@
             alert("行数・列数には1以上の整数を入力してください。");
             return null;
         }
+        var layout = {
+            x: parseFloat(xInput.text), y: parseFloat(yInput.text),
+            w: parseFloat(wInput.text), h: parseFloat(hInput.text)
+        };
+        if (isNaN(layout.x) || isNaN(layout.y) || !(layout.w > 0) || !(layout.h > 0)) {
+            alert("位置と大きさには数値を入力してください（幅・高さは 0 より大きい値）。");
+            return null;
+        }
+        var minW = CONFIG.margin * 2, minH = CONFIG.margin * 3 + CONFIG.headerHeight;
+        if (layout.w <= minW || layout.h <= minH) {
+            alert("表が小さすぎます。幅は " + minW + " px、高さは " + minH + " px より大きくしてください。");
+            return null;
+        }
+        saveLayout(layout);
         return {
+            layout: layout,
             csvFile: csvFile,
             rows: rows,
             cols: cols,
@@ -262,6 +307,48 @@
             rough: roughCheck.value,
             exportPNG: exportCheck.value
         };
+    }
+
+    // 下地の位置と大きさから、ヘッダーとテーブルの位置と大きさを計算する（余白はすべて margin）
+    function layoutSpecs(l) {
+        var m = CONFIG.margin, hh = CONFIG.headerHeight;
+        var top = l.y - l.h / 2;
+        var innerW = l.w - m * 2;
+        var bodyH = l.h - m * 3 - hh;
+        return {
+            outer:  { x: l.x, y: l.y, w: l.w, h: l.h },
+            header: { x: l.x, y: top + m + hh / 2, w: innerW, h: hh },
+            body:   { x: l.x, y: top + m + hh + m + bodyH / 2, w: innerW, h: bodyH }
+        };
+    }
+
+    // 前回入力した位置と大きさを読む（なければ初期値）
+    function loadLayout() {
+        var l = { x: CONFIG.layout.x, y: CONFIG.layout.y, w: CONFIG.layout.w, h: CONFIG.layout.h };
+        var f = new File(CONFIG.settingsFile);
+        try {
+            if (f.exists && f.open("r")) {
+                var v = f.read().split(",");
+                f.close();
+                if (v.length === 4) {
+                    var n = [parseFloat(v[0]), parseFloat(v[1]), parseFloat(v[2]), parseFloat(v[3])];
+                    if (!isNaN(n[0]) && !isNaN(n[1]) && n[2] > 0 && n[3] > 0) {
+                        l = { x: n[0], y: n[1], w: n[2], h: n[3] };
+                    }
+                }
+            }
+        } catch (e) {}
+        return l;
+    }
+
+    function saveLayout(l) {
+        var f = new File(CONFIG.settingsFile);
+        try {
+            if (f.open("w")) {
+                f.write([l.x, l.y, l.w, l.h].join(","));
+                f.close();
+            }
+        } catch (e) {}
     }
 
     function readCSV(file) {
