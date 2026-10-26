@@ -86,7 +86,7 @@
         },
 
         // 2 つ目以降の表は、新しいアートボードを右に追加して作る
-        newArtboard: { w: 1920, h: 1080, gap: 100 },
+        newArtboard: { w: 1920, h: 1080, gap: 100, perRow: 3 },  // perRow：1 段に並べる数（それ以上は下の段へ）
 
         defaultFitArtboard: true,      // ダイアログの初期値：アートボードを表にぴったり合わせる
         exportFolderName: "素材"        // Illustrator ファイルと同じ場所にあるこの名前のフォルダ。キャラ画像をここから探し、PNG もここへ保存（なければ作る）
@@ -964,19 +964,35 @@
         }
     }
 
-    // 一番右のアートボードのさらに右に、新しいアートボードを追加して、その番号を返す
+    // 新しいアートボードを追加して、その番号を返す
+    // 最後のアートボードの右に並べる。1 段に perRow 個並んだとき、または右がカンバス（作業できる範囲）の外に
+    // はみ出すときは、いちばん下のアートボードの下に段を変えて置く
     function addArtboard() {
-        var maxRight = -Infinity;
-        var top = doc.artboards[0].artboardRect[1];
-        for (var i = 0; i < doc.artboards.length; i++) {
-            maxRight = Math.max(maxRight, doc.artboards[i].artboardRect[2]);
-        }
         var n = CONFIG.newArtboard;
-        var left = maxRight + n.gap;
-        doc.artboards.add([left, top, left + n.w, top - n.h]);
-        var index = doc.artboards.length - 1;
-        doc.artboards.setActiveArtboardIndex(index);
-        return index;
+        var last = doc.artboards[doc.artboards.length - 1].artboardRect;
+        var minLeft = Infinity, minBottom = Infinity, inRow = 0;
+        for (var i = 0; i < doc.artboards.length; i++) {
+            var r = doc.artboards[i].artboardRect;
+            minLeft = Math.min(minLeft, r[0]);
+            minBottom = Math.min(minBottom, r[3]);
+            if (Math.abs(r[1] - last[1]) < 1) inRow++;
+        }
+        var places = [];
+        if (inRow < n.perRow) places.push([last[2] + n.gap, last[1]]);  // 右へ
+        places.push([minLeft, minBottom - n.gap]);                       // 下の段の左はし
+        for (var p = 0; p < places.length; p++) {
+            var left = places[p][0], top = places[p][1];
+            try {
+                doc.artboards.add([left, top, left + n.w, top - n.h]);
+                var index = doc.artboards.length - 1;
+                doc.artboards.setActiveArtboardIndex(index);
+                return index;
+            } catch (e) {
+                // カンバスの外（Illustrator のエラー AOoC）。次の場所を試す
+            }
+        }
+        throw new Error("新しいアートボードを置く場所がありません（Illustrator の作業できる範囲の外になります）。"
+                      + "使わないアートボードを消すか、別のファイルで作ってください。");
     }
 
     // 同じ名前があれば「名前 (2)」のように番号を付ける
