@@ -122,6 +122,7 @@
       <div class="row"><span id="sizeNote" class="note"></span></div>
       <div class="row"><label class="k">マスの間隔</label><input type="number" id="gap" min="0" step="any"><span class="note">px（マスとマスの間）</span></div>
       <div class="row"><label class="c"><input type="checkbox" id="frame">まわりに枠</label><input type="number" id="frameWidth" min="0" step="any"><span class="note">px</span><input type="color" id="frameColor"></div>
+      <div class="row"><label class="c"><input type="checkbox" id="frameRough">枠にもラフをかける</label></div>
       <button id="layoutReset">初期値に戻す</button>
     </fieldset>
 
@@ -204,7 +205,7 @@
   var cep = window.__adobe_cep__;
   var $ = function (id) { return document.getElementById(id); };
 
-  var DEFAULTS = { x: 960, y: 540, w: 1505, h: 592.5, wp: 100, hp: 100, gap: 7.5, frame: true, frameWidth: 7.5, frameColor: "#ff0000",
+  var DEFAULTS = { x: 960, y: 540, w: 1505, h: 592.5, wp: 100, hp: 100, gap: 7.5, frame: true, frameRough: false, frameWidth: 7.5, frameColor: "#ff0000",
                    fitArtboard: true, overwrite: true, createRough: true, createRaster: true };
   var RATIOS = [
     { label: "100%（そのまま）", value: 1 },
@@ -280,11 +281,11 @@
   ["x", "y", "w", "h", "wp", "hp", "gap", "frameWidth", "frameColor"].forEach(function (k) { $(k).value = form[k]; });
   $("wpR").value = form.wp;
   $("hpR").value = form.hp;
-  ["frame", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) { $(k).checked = !!form[k]; });
+  ["frame", "frameRough", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) { $(k).checked = !!form[k]; });
   updateCSV();
   updateSize();
 
-  ["x", "y", "w", "h", "wp", "hp", "gap", "frameWidth", "frameColor", "frame", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) {
+  ["x", "y", "w", "h", "wp", "hp", "gap", "frameWidth", "frameColor", "frame", "frameRough", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) {
     $(k).addEventListener("input", saveForm);
     $(k).addEventListener("change", saveForm);
   });
@@ -325,6 +326,7 @@
   $("layoutReset").addEventListener("click", function () {
     ["x", "y", "w", "h", "wp", "hp", "gap", "frameWidth", "frameColor"].forEach(function (k) { $(k).value = DEFAULTS[k]; });
     $("frame").checked = DEFAULTS.frame;
+    $("frameRough").checked = DEFAULTS.frameRough;
     $("wpR").value = DEFAULTS.wp;
     $("hpR").value = DEFAULTS.hp;
     updateSize();
@@ -337,7 +339,7 @@
     var h = parseFloat($("h").value) * percent("hp");
     var base = {
       x: $("x").value, y: $("y").value, w: w, h: h, gap: $("gap").value,
-      frame: $("frame").checked, frameWidth: $("frameWidth").value, frameColor: $("frameColor").value,
+      frame: $("frame").checked, frameWidth: $("frameWidth").value, frameColor: $("frameColor").value, frameRough: $("frameRough").checked,
       rough: false, fixRough: false, fitArtboard: $("fitArtboard").checked,
       overwrite: $("overwrite").checked
     };
@@ -357,7 +359,7 @@
     }
 
     var made = [];
-    var rough = $("createRough").checked, raster = $("createRaster").checked;
+    var rough = $("createRough").checked, raster = $("createRaster").checked, frameRough = $("frame").checked && $("frameRough").checked;
     busy(true, "表を作っています…");
     (function next(i) {
       if (i >= jobs.length) {
@@ -387,7 +389,7 @@
         // 続けて仕上げ（ラフ・画像にする）
         if ((rough || raster) && res.board >= 0) {
           setStatus("仕上げています…（" + (i + 1) + " / " + jobs.length + "）" + (job.csvPath || job.data ? job.name : ""));
-          call("PT.finishTable(" + res.board + ", " + rough + ", " + raster + ")", function () { next(i + 1); });
+          call("PT.finishTable(" + res.board + ", " + rough + ", " + raster + ", " + frameRough + ")", function () { next(i + 1); });
         } else {
           next(i + 1);
         }
@@ -598,7 +600,7 @@
     var f = {};
     ["x", "y", "w", "h", "wp", "hp", "gap", "frameWidth", "frameColor"].forEach(function (k) { f[k] = $(k).value; });
     f.wpSet = true;  // パーセントで保存した印（前の版のプルダウンの番号は使わない）
-    ["frame", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) { f[k] = $(k).checked; });
+    ["frame", "frameRough", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) { f[k] = $(k).checked; });
     save("create", f);
   }
 

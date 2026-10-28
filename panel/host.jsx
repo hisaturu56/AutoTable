@@ -173,7 +173,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
     // ---- 仕上げ：ラフをかけて、土台を 1 枚の画像にする ----
 
     var FINISHED_NAME = "土台（画像）";
-    var FRAME_NAME = "枠";  // まわりの枠（1.9.0 から）。ラフをかけない
+    var FRAME_NAME = "枠";  // まわりの枠（1.9.0 から）。パネルで「枠にもラフ」にしたときだけラフをかける
     var ROUGH_NOTE = "ラフ";  // ラフをかけた形の note（二重にかけないように）
     var ROUGH_XML = '<LiveEffect name="Adobe Roughen"><Dict data="R asiz ' + ROUGH_SIZE + ' R size ' + ROUGH_SIZE
                   + ' R absoluteness 1 R dtal 100 R roundness 0 "/></LiveEffect>';  // テーブル自動作成のラフと同じ設定
@@ -184,7 +184,8 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
     //     元の下地・ヘッダー・マスは隠して残す（マスの位置を、文字の大きさ・キャラ画像の調整に使うため）
     //   もう画像にしてある表は、前の画像を消して元の形から作り直す
     //   キャラ画像と文字には何もしない
-    function finishTable(board, rough, raster) {
+    //   frameRough：まわりの「枠」にもラフをかけるか（1.9.2 から。省くとかけない）
+    function finishTable(board, rough, raster, frameRough) {
         var doc = activeDoc();
         if (!doc || !doc.artboards[board]) return json(null);
         var t = tableOnArtboard(doc, board);
@@ -219,7 +220,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         if (rough) {
             for (var i = 0; i < items.length; i++) {
                 var it = items[i];
-                if (it.typename === "PathItem" && it.pathPoints.length <= 4 && it.note !== ROUGH_NOTE && it.name !== FRAME_NAME) {
+                if (it.typename === "PathItem" && it.pathPoints.length <= 4 && it.note !== ROUGH_NOTE && (frameRough || it.name !== FRAME_NAME)) {
                     it.applyEffect(ROUGH_XML);
                     it.note = ROUGH_NOTE;
                     roughed.push(it);
