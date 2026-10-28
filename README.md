@@ -17,8 +17,7 @@ Illustrator で、キャラクター用の基礎ステータス表を自動で�
 
 | ファイル | 内容 |
 | --- | --- |
-| [AutoTable.zxp](download/AutoTable.zxp) | **パネル本体**。ZXP UXP installer にドラッグ＆ドロップして入れる（おすすめ） |
-| [AutoTable_panel.zip](download/AutoTable_panel.zip) | ZXP が使えないとき用。展開して `install.bat` をダブルクリック |
+| [AutoTable.zxp](download/AutoTable.zxp) | **パネル本体**。ZXP UXP installer にドラッグ＆ドロップして入れる |
 | [samples/](samples) | 試しに使える CSV（テスト用台本の 5 つの表など） |
 
 リンクを開いて、右上の「…」または「Download raw file」（↓のボタン）で保存します。
@@ -38,7 +37,7 @@ Illustrator の「ウィンドウ」メニューから開いて、出しっぱ�
 
 中の処理は、下のスクリプトと同じです（表を作るは `テーブル自動作成.jsx` をパネルの設定で実行、画像調整・書き出しは `panel/host.jsx` に同じ計算・書き出し方を入れてある）。
 
-### 入れ方（おすすめ：ZXP UXP installer）
+### 入れ方（ZXP UXP installer）
 
 1. `AutoTable.zxp` をダウンロードする
 2. ZXP UXP installer を開いて、`AutoTable.zxp` をドラッグ＆ドロップする（または「開く」から選ぶ）
@@ -47,19 +46,8 @@ Illustrator の「ウィンドウ」メニューから開いて、出しっぱ�
 - 新しい `.zxp` が来たら、同じように入れれば上書きされる。消すときも ZXP UXP installer から
 - **1.6.3 までの「ポロライドテーブル自動作成」（PolaroidTable）が入っているときは、ZXP UXP installer で先にそれを消す**（名前と ID を変えたので、別のパネルとして 2 つ並んでしまう）。Notion のトークンと、表を作るときの位置・大きさの値は、前のものをそのまま読むので入れ直さなくてよい。パネルの中の設定（データの選び方・チェックなど）は最初の状態に戻る
 - `.zxp` には自己署名の証明書で署名している（`tools/SignZxp.java`。Adobe の ZXPSignCmd と同じ形式）。インストーラーで「発行元を確認できない」などの注意が出ても、そのまま進めてよい
-- パネルが出ないときは、下の `install.bat` を 1 回実行する（署名なしのパネルを読み込む設定もするため）
-
-### 入れ方（ZXP が使えないとき：install.bat）
-
-1. `AutoTable_panel.zip` を展開する（右クリック →「すべて展開」）
-2. 中の `install.bat` をダブルクリックする（「Windows によって PC が保護されました」と出たら「詳細情報」→「実行」）
-3. Illustrator を再起動する
-4. 「ウィンドウ」→「エクステンション」→「テーブル自動作成」を開く
-
-- スクリプトが新しくなったら、新しい zip で 1〜3 をやり直す（上書きされる）。1.6.3 までの古い名前のパネル（PolaroidTable）は install.bat が消す
-- 消すときは `uninstall.bat` をダブルクリック
-- `install.bat` は、署名していない手作りのパネルを Illustrator が読み込めるようにする設定（PlayerDebugMode）も一緒に行う
-- `.zxp` と zip は `python3 tools/build_panel.py` で作る（`dist/AutoTable.zxp`・`dist/AutoTable_panel.zip`。Java 17 以降が必要）。中のスクリプトは `scripts/` のコピー
+- パネルが出ないときは Claude に相談する（前は予備の install.bat 入りの zip を置いていたが、使わないのでなくした）
+- `.zxp` は `python3 tools/build_panel.py` で作る（`dist/AutoTable.zxp`。`download/` にもコピーする。Java 17 以降が必要）。中のスクリプトは `scripts/` のコピー
 
 ### Notion から作る
 
@@ -246,7 +234,6 @@ images/タフィー.png,タフィー,9190,6838,5735,7132
 ```
 download/                     ダウンロード用（ここから入れる）
   AutoTable.zxp                 パネル（ZXP UXP installer で入れる）
-  AutoTable_panel.zip           パネル（install.bat で入れる予備）
 
 samples/                      試しに使える CSV（数値などはすべて仮）
   基礎ステータス_サンプル.csv     CSV の書き方の例
@@ -268,7 +255,7 @@ docs/                         説明・記録
   手作業の作成手順メモ.txt        スクリプト化する前の手作業の手順（元の仕様）
 
 tools/                        パネルのファイルを作る道具（開発用）
-  build_panel.py                download/ の .zxp と zip を作る
+  build_panel.py                download/ の .zxp を作る
   SignZxp.java                  .zxp に署名を付ける
   （署名用の証明書 zxp-cert.p12 は git に入れない。なければ build_panel.py が自動で作る）
 tests/notion_test.js          match.js・notion.js のテスト（node tests/notion_test.js）
