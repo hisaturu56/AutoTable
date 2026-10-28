@@ -703,6 +703,7 @@
     // 列の幅を文字の長さに合わせて決める（合計 total）
     //   1. 列ごとに、いちばん長い文字が入る幅（マスの高さで決まる文字の大きさで測り、左右の padding を足す）を出す
     //   2. 均等な幅に入る列は同じ幅のまま、入らない列だけ必要な幅まで広げ、ほかの列を同じだけ狭くする
+    //   数字の列はいつも同じ幅にそろえる（必要な幅を、数字の列の中でいちばん広いものに合わせてから決める）
     //   3. 全部の列の必要な幅の合計が total を超えるときは、必要な幅の割合で分ける（文字は layoutCellTexts で表全体をまとめて縮める）
     function columnWidths(total) {
         var scale = Math.min(1, cellH / CONFIG.refCellHeight);
@@ -715,8 +716,14 @@
                 if (v) max = Math.max(max, measureText(v) * scale);
             }
             needs.push(max ? max + CONFIG.text.padding * 2 : 0);
-            sum += needs[c];
         }
+        // 数字の列（1 行目の項目名を除いて、数字か空だけの列）は同じ幅にそろえる（いちばん広く要る数字の列に合わせる）
+        var numCols = [], numNeed = 0;
+        for (var q = 0; q < opts.cols; q++) {
+            if (isNumberColumn(col0 + q)) { numCols.push(q); numNeed = Math.max(numNeed, needs[q]); }
+        }
+        for (var u = 0; u < numCols.length; u++) needs[numCols[u]] = numNeed;
+        for (var a = 0; a < needs.length; a++) sum += needs[a];
         var widths = [];
         if (sum >= total) {
             for (var i = 0; i < needs.length; i++) widths.push(total * needs[i] / sum);
@@ -737,6 +744,19 @@
         }
         for (var n = 0; n < needs.length; n++) widths.push(fixed[n] ? needs[n] : level);
         return widths;
+    }
+
+    // 1 行目（項目名）を除いて、数字か空だけで、数字が 1 つ以上ある列か
+    function isNumberColumn(index) {
+        var found = false;
+        for (var r = 1; r < opts.rows; r++) {
+            var v = data[r] ? trim(data[r][index] || "") : "";
+            if (!v) continue;
+            var text = CONFIG.text.formatNumbers ? formatNumber(v) : v;
+            if (!/^-?[\d,]+(\.\d+)?$/.test(text)) return false;
+            found = true;
+        }
+        return found;
     }
 
     // 文字を基準の大きさで置いたときの幅（マスに入れるときと同じ書式で測って、すぐ消す）
