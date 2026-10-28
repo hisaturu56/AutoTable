@@ -106,7 +106,7 @@
 
 
     <fieldset>
-      <legend>表全体（下地）の位置と大きさ（px・中心）</legend>
+      <legend>表（マスの部分）の位置と大きさ（px・中心）</legend>
       <div class="row">
         <label class="k">X</label><input type="number" id="x" step="any">
         <label>Y</label><input type="number" id="y" step="any">
@@ -121,7 +121,7 @@
       <div class="presets" data-for="hp"><button data-v="100">100%</button><button data-v="50">50%</button><button data-v="66.667">3分の2</button><button data-v="33.333">3分の1</button><button data-v="75">4分の3</button><button data-v="25">4分の1</button></div>
       <div class="row"><span id="sizeNote" class="note"></span></div>
       <div class="row"><label class="k">マスの間隔</label><input type="number" id="gap" min="0" step="any"><span class="note">px（マスとマスの間）</span></div>
-      <div class="row"><label class="c" style="white-space:nowrap"><input type="checkbox" id="marginOn">外枠の余白</label><input type="number" id="margin" min="0" step="any"><span class="note">px 空ける（下地のフチとマスの間）</span></div>
+      <div class="row"><label class="c" style="white-space:nowrap"><input type="checkbox" id="marginOn">外枠の余白</label><input type="number" id="margin" min="0" step="any"><span class="note">px（マスのまわりに下地を広げる）</span></div>
       <button id="layoutReset">初期値に戻す</button>
     </fieldset>
 
@@ -305,7 +305,7 @@
       saveForm();
     });
   }
-  ["w", "h", "wp", "hp"].forEach(function (k) {
+  ["w", "h", "wp", "hp", "margin", "marginOn"].forEach(function (k) {
     $(k).addEventListener("input", updateSize);
     $(k).addEventListener("change", updateSize);
   });
@@ -591,8 +591,11 @@
   function updateSize() {
     var w = parseFloat($("w").value) * percent("wp");
     var h = parseFloat($("h").value) * percent("hp");
+    var m = $("marginOn").checked ? parseFloat($("margin").value) : 0;
+    if (!(m > 0)) m = 0;
     $("sizeNote").textContent = isNaN(w) || isNaN(h) ? "幅・高さに数値を入れてください"
-                                                    : "→ 作る大きさ：幅 " + round(w) + " × 高さ " + round(h) + " px";
+                                                    : "→ マスの部分：幅 " + round(w) + " × 高さ " + round(h) + " px"
+                                                      + (m ? "／外枠を入れた全体：" + round(w + m * 2) + " × " + round(h + m * 2) + " px" : "");
   }
 
   function saveForm() {

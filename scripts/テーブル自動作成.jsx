@@ -305,7 +305,8 @@
 
     var msg = "ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
             + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? (roughFixed ? "、ラフあり（固定）" : "、ラフあり") : "、ラフなし") + "）\n"
-            + "表全体：" + round(opts.layout.w) + " × " + round(opts.layout.h) + " px\n"
+            + "表全体：" + round(specs.outer.w) + " × " + round(specs.outer.h) + " px"
+            + (opts.margin ? "（マスの部分 " + round(opts.layout.w) + " × " + round(opts.layout.h) + " ＋ 外枠の余白 " + round(opts.margin) + "）" : "") + "\n"
             + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + (colWidths ? colWidthsText() + "（文字の長さに合わせた）" : round(colW)) + " px\n"
             + "文字の大きさ：文字 " + round(CONFIG.text.size * textScale) + " pt ／ 数字 " + round(CONFIG.number.size * textScale) + " pt";
     msg += "\n\nアートボード：" + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」" + (newArtboard ? "（新しく追加）" : "");
@@ -402,7 +403,7 @@
         gapInput.characters = 7;
         g7.add("statictext", undefined, "px");
         var g8 = layoutPanel.add("group");
-        var marginCheck = g8.add("checkbox", undefined, "外枠の余白を空ける（下地のフチとマスの間）：");
+        var marginCheck = g8.add("checkbox", undefined, "外枠の余白を付ける（マスのまわりに下地を広げる）：");
         marginCheck.value = saved.marginOn;
         var marginInput = g8.add("edittext", undefined, String(saved.margin));
         marginInput.characters = 7;
