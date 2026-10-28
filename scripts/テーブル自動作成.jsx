@@ -22,10 +22,8 @@
         // 表全体（下地）の位置と大きさの初期値。実行時のダイアログで変えられる
         // イラレの表示と同じ値（基準点＝中心、Y はアートボードの上端から下向き）
         layout: { x: 960, y: 540, w: 1505, h: 592.5 },   // 初期値はアートボード（1920×1080）の中心
-        // ヘッダーは 1.8.0 でなくした。表全体のまわりに枠（色を変えられる）を付け、その内側の下地いっぱいにマスを並べる
-        // 下地はマスとマスの間にだけ見える。枠なしにすると、マスは表全体いっぱいに並ぶ
+        // マスは下地いっぱいに並べる（ヘッダーと、下地のフチとマスの間の余白は 1.8.0 でなくした）。下地はマスとマスの間にだけ見える
         gap: 7.5,                      // マス同士の間隔の初期値。実行時のダイアログ・パネルで変えられる
-        frame: { enabled: true, width: 7.5, color: "#FF0000", name: "枠", rough: false },  // 枠の初期値（あり・太さ px・色・ラフ）。ダイアログ・パネルで変えられる
         // 幅・高さの割合（ダイアログのプルダウン）。入力した幅・高さにこの割合をかけた大きさで作る
         ratios: [
             { label: "100%（そのまま）", value: 1 },
@@ -200,21 +198,8 @@
     doc.artboards[abIndex].name = uniqueArtboardName(tableName, abIndex);
 
     // 下から 下地 → テーブル の順に重なるように作る。マスは下地いっぱいに並べる
-    // 枠ありのときは「下地」レイヤーの中に、表全体の大きさの「枠」と、その内側の「下地」の 2 つの長方形を作る
-    var frame = opts.frame;
-    var specs = { outer: opts.layout, body: frame ? insetSpec(opts.layout, frame.width) : opts.layout };
-    var outerLayer = findLayer(CONFIG.layerNames.outer);
-    var hadOuter = !!(outerLayer && outerLayer.pathItems.length);
-    var outerRect = existingOrNewRect(CONFIG.layerNames.outer, specs.outer, frame ? frame.color : CONFIG.colors.outer);
-    var frameMade = frame && !hadOuter;
-    if (frameMade) {
-        outerRect.name = CONFIG.frame.name;
-        if (!frame.rough) roughTargets.pop();  // 枠には、「枠にもラフ」にしたときだけラフをかける
-        var innerBox = specToBox(specs.body);
-        var innerRect = styleRect(outerRect.layer.pathItems.rectangle(innerBox.top, innerBox.left, innerBox.w, innerBox.h),
-                                  CONFIG.layerNames.outer, CONFIG.colors.outer);
-        roughTargets.push(innerRect);
-    }
+    var specs = { outer: opts.layout, body: opts.layout };
+    var outerRect = existingOrNewRect(CONFIG.layerNames.outer, specs.outer, CONFIG.colors.outer);
     var gap = opts.gap;
     var body;
     if (templateRect) {
@@ -291,7 +276,7 @@
 
     var fitted = null;
     if (opts.fitArtboard) {
-        fitted = fitArtboardToTable([outerRect].concat(cells), opts.rough && !roughFailed && !(frameMade && !frame.rough));  // ラフなしの枠がいちばん外側なら広げない
+        fitted = fitArtboardToTable([outerRect].concat(cells), opts.rough && !roughFailed);
     }
 
     // ラフを固定する：ラフの効果は画面を描き直すたびに計算されて重いので、「アピアランスを分割」で普通の形に変える
@@ -404,24 +389,9 @@
         var gapInput = g7.add("edittext", undefined, String(saved.gap));
         gapInput.characters = 7;
         g7.add("statictext", undefined, "px");
-        var g8 = layoutPanel.add("group");
-        var frameCheck = g8.add("checkbox", undefined, "まわりに枠を付ける　太さ：");
-        frameCheck.value = saved.frame;
-        var frameWInput = g8.add("edittext", undefined, String(saved.frameWidth));
-        frameWInput.characters = 5;
-        g8.add("statictext", undefined, "px　色：");
-        var frameCInput = g8.add("edittext", undefined, saved.frameColor);
-        frameCInput.characters = 8;
-        g8.add("statictext", undefined, "（#FF0000 の形）");
-        var frameRoughCheck = layoutPanel.add("checkbox", undefined, "枠にもラフをかける");
-        frameRoughCheck.value = saved.frameRough;
         layoutPanel.add("statictext", undefined, "※ 下地・テーブルがすでにあるときは、そちらの位置を使います");
         resetBtn.onClick = function () {
             gapInput.text = String(CONFIG.gap);
-            frameCheck.value = CONFIG.frame.enabled;
-            frameWInput.text = String(CONFIG.frame.width);
-            frameCInput.text = CONFIG.frame.color;
-            frameRoughCheck.value = CONFIG.frame.rough;
             xInput.text = String(CONFIG.layout.x);
             yInput.text = String(CONFIG.layout.y);
             wInput.text = String(CONFIG.layout.w);
@@ -480,9 +450,7 @@
             w: parseFloat(wInput.text), h: parseFloat(hInput.text),
             wr: wRatioList.selection ? wRatioList.selection.index : 0,
             hr: hRatioList.selection ? hRatioList.selection.index : 0,
-            gap: parseFloat(gapInput.text),
-            frame: frameCheck.value, frameWidth: parseFloat(frameWInput.text), frameColor: trim(frameCInput.text),
-            frameRough: frameRoughCheck.value
+            gap: parseFloat(gapInput.text)
         };
         var layout = {
             x: input.x, y: input.y,
@@ -496,13 +464,10 @@
             alert("マスとマスの間隔には 0 以上の数値を入力してください。");
             return null;
         }
-        var frame = frameOption(input.frame, input.frameWidth, input.frameColor, input.frameRough, layout);
-        if (frame === false) return null;
         saveLayout(input);
         return {
             layout: layout,
             gap: input.gap,
-            frame: frame,
             csvFile: csvFile,
             rows: rows,
             cols: cols,
@@ -536,15 +501,9 @@
             alert("マスとマスの間隔には 0 以上の数値を入力してください。");
             return null;
         }
-        var frame = frameOption(p.frame === undefined ? CONFIG.frame.enabled : !!p.frame,
-                                p.frameWidth === undefined || p.frameWidth === "" ? CONFIG.frame.width : parseFloat(p.frameWidth),
-                                p.frameColor || CONFIG.frame.color,
-                                p.frameRough === undefined ? CONFIG.frame.rough : !!p.frameRough, layout);
-        if (frame === false) return null;
         return {
             layout: layout,
             gap: gap,
-            frame: frame,
             csvFile: csvFile,
             rows: rows,
             cols: cols,
@@ -574,37 +533,9 @@
         return list.selection ? CONFIG.ratios[list.selection.index].value : 1;
     }
 
-    // 枠の設定を確かめて { width, color（RGB）, rough } にする。枠なしは null、入力がおかしいときは false
-    function frameOption(on, width, color, rough, layout) {
-        if (!on) return null;
-        var rgb = hexToRgb(color);
-        if (!(width > 0) || !rgb) {
-            alert("枠の太さには 0 より大きい数値、色には #FF0000 の形（6 けたの 16 進数）を入力してください。");
-            return false;
-        }
-        if (width * 2 >= layout.w || width * 2 >= layout.h) {
-            alert("枠が太すぎます。表全体の幅・高さの半分より細くしてください。");
-            return false;
-        }
-        return { width: width, color: rgb, rough: !!rough };
-    }
-
-    function hexToRgb(hex) {
-        var m = /^#?([0-9a-fA-F]{6})$/.exec(String(hex || ""));
-        if (!m) return null;
-        var n = parseInt(m[1], 16);
-        return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-    }
-
-    // 位置と大きさ（中心・幅・高さ）を、まわりから d だけ内側に縮める
-    function insetSpec(l, d) {
-        return { x: l.x, y: l.y, w: l.w - d * 2, h: l.h - d * 2 };
-    }
-
-    // 前回入力した値（X・Y・幅・高さ・幅の割合・高さの割合・マスの間隔・枠のあり／なし・太さ・色・枠にもラフ）
+    // 前回入力した値（X・Y・幅・高さ・幅の割合・高さの割合）
     function loadLayout() {
         var l = { x: CONFIG.layout.x, y: CONFIG.layout.y, w: CONFIG.layout.w, h: CONFIG.layout.h, wr: 0, hr: 0, gap: CONFIG.gap };
-        l.frame = CONFIG.frame.enabled; l.frameWidth = CONFIG.frame.width; l.frameColor = CONFIG.frame.color; l.frameRough = CONFIG.frame.rough;
         var f = new File(CONFIG.settingsFile);
         if (!f.exists) f = new File(CONFIG.oldSettingsFile);
         try {
@@ -614,18 +545,13 @@
                 if (v.length >= 4) {
                     var n = [parseFloat(v[0]), parseFloat(v[1]), parseFloat(v[2]), parseFloat(v[3])];
                     if (!isNaN(n[0]) && !isNaN(n[1]) && n[2] > 0 && n[3] > 0) {
-                        l.x = n[0]; l.y = n[1]; l.w = n[2]; l.h = n[3];
+                        l = { x: n[0], y: n[1], w: n[2], h: n[3], wr: 0, hr: 0, gap: CONFIG.gap };
                     }
                     var wr = parseInt(v[4], 10), hr = parseInt(v[5], 10);
                     if (wr >= 0 && wr < CONFIG.ratios.length) l.wr = wr;
                     if (hr >= 0 && hr < CONFIG.ratios.length) l.hr = hr;
                     var gp = parseFloat(v[6]);  // 1.8.0 から：マスとマスの間隔
                     if (gp >= 0) l.gap = gp;
-                    if (v[7] === "0" || v[7] === "1") l.frame = v[7] === "1";  // 1.9.0 から：枠
-                    var fw = parseFloat(v[8]);
-                    if (fw > 0) l.frameWidth = fw;
-                    if (hexToRgb(v[9])) l.frameColor = trim(v[9]);
-                    if (v[10] === "0" || v[10] === "1") l.frameRough = v[10] === "1";  // 1.9.2 から：枠にもラフ
                 }
             }
         } catch (e) {}
@@ -636,7 +562,7 @@
         var f = new File(CONFIG.settingsFile);
         try {
             if (f.open("w")) {
-                f.write([l.x, l.y, l.w, l.h, l.wr, l.hr, l.gap, l.frame ? 1 : 0, l.frameWidth, l.frameColor, l.frameRough ? 1 : 0].join(","));
+                f.write([l.x, l.y, l.w, l.h, l.wr, l.hr, l.gap].join(","));
                 f.close();
             }
         } catch (e) {}
