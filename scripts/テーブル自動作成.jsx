@@ -22,10 +22,8 @@
         // 表全体（下地）の位置と大きさの初期値。実行時のダイアログで変えられる
         // イラレの表示と同じ値（基準点＝中心、Y はアートボードの上端から下向き）
         layout: { x: 960, y: 540, w: 1505, h: 592.5 },   // 初期値はアートボード（1920×1080）の中心
-        // ヘッダーとテーブルは下地から自動で計算する（初期値なら ヘッダー 1490×30、テーブル 1490×540）
-        headerHeight: 30,
-        margin: 7.5,                   // 下地のフチからヘッダー・テーブルまでの余白、ヘッダーとテーブルの間
-        gap: 7.5,                      // マス同士の間隔
+        // マスは下地いっぱいに並べる（ヘッダーと、下地のフチとマスの間の余白は 1.8.0 でなくした）。下地はマスとマスの間にだけ見える
+        gap: 7.5,                      // マス同士の間隔の初期値。実行時のダイアログ・パネルで変えられる
         // 幅・高さの割合（ダイアログのプルダウン）。入力した幅・高さにこの割合をかけた大きさで作る
         ratios: [
             { label: "100%（そのまま）", value: 1 },
@@ -37,7 +35,7 @@
         oldSettingsFile: Folder.userData + "/PolaroidTable_layout.txt",  // 名前を変える前（1.6.3 まで）のファイル。新しいファイルがなければこちらを読む
 
         // このレイヤーがドキュメントにあれば、その長方形を使う（「テーブル」の長方形をマス目に加工する）
-        layerNames: { outer: "下地", header: "ヘッダー", table: "テーブル", image: "キャラ画像" },  // キャラ画像はテーブルの上の別レイヤー
+        layerNames: { outer: "下地", table: "テーブル", image: "キャラ画像" },  // キャラ画像はテーブルの上の別レイヤー
 
         defaultRows: 6,                // ダイアログの初期値：行数（CSV を使わないとき）
         defaultCols: 5,                // ダイアログの初期値：列数（キャラ欄は含まない）
@@ -51,20 +49,18 @@
 
         colors: {                      // RGB（新しく作るときの色）
             outer:  [128, 128, 128],   // #808080
-            header: [48, 48, 48],      // #303030
             cell:   [48, 48, 48],      // #303030
             text:   [224, 224, 224]
         },
 
         // マスの文字。フォントが見つからなければ既定のフォント
-        // ヘッダーの帯の文字は AE でアニメーションさせるので、ここでは入れない
         //
         // 文字の大きさは表全体でそろえ、マスの大きさに合わせて決める：
         //   1. マスの高さが refCellHeight のときに size になる比率で、マスの高さに比例させる（size が上限）
         //   2. 一番長い文字がマスの幅（左右 padding を除く）に収まるところまで、表全体をまとめて縮める
         //   文字と数字は同じ割合で縮むので、文字と数字の大きさのバランスは変わらない
         // 基準のマスの高さ。参考画像では 3〜7 行まで文字の大きさは同じ（高さ 約 36 px）だったので、
-        // 7 行のマスの高さ（初期値の表で 70.714 px）までは size のまま、これより低いマスで縮め始める
+        // 7 行のマスの高さ（1.7.0 までの初期値の表で 70.714 px）までは size のまま、これより低いマスで縮め始める
         refCellHeight: 70.714,
         text: {
             family: "Noto Sans JP", style: "Black",
@@ -177,9 +173,9 @@
         old.layer.remove();
     }
 
-    // ---- 下地・ヘッダー・テーブル ----
-    // 「テーブル」レイヤー（一番上の階層）に長方形があれば、それをマス目に加工する（手で用意した下地・ヘッダーも使う）
-    // それ以外は、表ごとに「表の名前」のレイヤーを作り、その中に 下地・ヘッダー・テーブル を作る（作ったものにはラフをかける）
+    // ---- 下地・テーブル ----
+    // 「テーブル」レイヤー（一番上の階層）に長方形があれば、それをマス目に加工する（手で用意した下地も使う）
+    // それ以外は、表ごとに「表の名前」のレイヤーを作り、その中に 下地・テーブル を作る（作ったものにはラフをかける）
     var layerRoot = doc;
     var tableLayer = findLayer(CONFIG.layerNames.table);
     var templateRect = tableLayer && tableLayer.pathItems.length ? tableLayer.pathItems[0] : null;
@@ -201,10 +197,10 @@
     if (!tableName) tableName = "表" + (abIndex + 1);
     doc.artboards[abIndex].name = uniqueArtboardName(tableName, abIndex);
 
-    // 下から 下地 → ヘッダー → テーブル の順に重なるように作る
-    var specs = layoutSpecs(opts.layout);
-    var outerRect  = existingOrNewRect(CONFIG.layerNames.outer, specs.outer, CONFIG.colors.outer);
-    var headerRect = existingOrNewRect(CONFIG.layerNames.header, specs.header, CONFIG.colors.header);
+    // 下から 下地 → テーブル の順に重なるように作る。マスは下地いっぱいに並べる
+    var specs = { outer: opts.layout, body: opts.layout };
+    var outerRect = existingOrNewRect(CONFIG.layerNames.outer, specs.outer, CONFIG.colors.outer);
+    var gap = opts.gap;
     var body;
     if (templateRect) {
         body = boundsToBox(templateRect.geometricBounds);
@@ -216,15 +212,15 @@
 
 
     // ---- マス目の計算 ----
-    // 行の高さ：例）6行なら (540 - 7.5×5) ÷ 6 = 83.75。キャラ欄はこの高さの正方形
-    var cellH = (body.h - CONFIG.gap * (opts.rows - 1)) / opts.rows;
+    // 行の高さ：例）高さ 592.5・6行なら (592.5 - 7.5×5) ÷ 6 = 92.5。キャラ欄はこの高さの正方形
+    var cellH = (body.h - gap * (opts.rows - 1)) / opts.rows;
 
-    var statX = opts.character ? body.left + cellH + CONFIG.gap : body.left;
+    var statX = opts.character ? body.left + cellH + gap : body.left;
     var statW = (body.left + body.w) - statX;
-    var colW  = (statW - CONFIG.gap * (opts.cols - 1)) / opts.cols;
+    var colW  = (statW - gap * (opts.cols - 1)) / opts.cols;
 
     if (cellH <= 0 || colW <= 0) {
-        alert("マスのサイズが0以下になります。行数・列数を減らしてください。");
+        alert("マスのサイズが0以下になります。行数・列数か、マスとマスの間隔を減らしてください。");
         return;
     }
 
@@ -233,7 +229,7 @@
     var cellTexts = [];
     var charBoxes = {};  // 行の番号 → キャラ欄のマス（作り直すときに、前のキャラ画像を合わせる）
     for (var r = 0; r < opts.rows; r++) {
-        var top = body.top - r * (cellH + CONFIG.gap);
+        var top = body.top - r * (cellH + gap);
         var row = data ? data[r] : [];
         var col = 0;
         if (opts.character) {
@@ -245,7 +241,7 @@
             col = 1;
         }
         for (var c = 0; c < opts.cols; c++) {
-            var left = statX + c * (colW + CONFIG.gap);
+            var left = statX + c * (colW + gap);
             var cell = makeCell("行" + (r + 1) + "_列" + (c + 1), top, left, colW, cellH);
             var value = row[col + c];
             if (value) cellTexts.push(addCellText(cell.group, value, top, left, colW, cellH));
@@ -280,7 +276,7 @@
 
     var fitted = null;
     if (opts.fitArtboard) {
-        fitted = fitArtboardToTable([outerRect, headerRect].concat(cells), opts.rough && !roughFailed);
+        fitted = fitArtboardToTable([outerRect].concat(cells), opts.rough && !roughFailed);
     }
 
     // ラフを固定する：ラフの効果は画面を描き直すたびに計算されて重いので、「アピアランスを分割」で普通の形に変える
@@ -388,8 +384,14 @@
         hInput.onChanging = updateSize;
         updateSize();
         var resetBtn = layoutPanel.add("button", undefined, "初期値に戻す");
-        layoutPanel.add("statictext", undefined, "※ 下地・ヘッダー・テーブルがすでにあるときは、そちらの位置を使います");
+        var g7 = layoutPanel.add("group");
+        g7.add("statictext", undefined, "マスとマスの間隔：");
+        var gapInput = g7.add("edittext", undefined, String(saved.gap));
+        gapInput.characters = 7;
+        g7.add("statictext", undefined, "px");
+        layoutPanel.add("statictext", undefined, "※ 下地・テーブルがすでにあるときは、そちらの位置を使います");
         resetBtn.onClick = function () {
+            gapInput.text = String(CONFIG.gap);
             xInput.text = String(CONFIG.layout.x);
             yInput.text = String(CONFIG.layout.y);
             wInput.text = String(CONFIG.layout.w);
@@ -447,7 +449,8 @@
             x: parseFloat(xInput.text), y: parseFloat(yInput.text),
             w: parseFloat(wInput.text), h: parseFloat(hInput.text),
             wr: wRatioList.selection ? wRatioList.selection.index : 0,
-            hr: hRatioList.selection ? hRatioList.selection.index : 0
+            hr: hRatioList.selection ? hRatioList.selection.index : 0,
+            gap: parseFloat(gapInput.text)
         };
         var layout = {
             x: input.x, y: input.y,
@@ -457,14 +460,14 @@
             alert("位置と大きさには数値を入力してください（幅・高さは 0 より大きい値）。");
             return null;
         }
-        var minW = CONFIG.margin * 2, minH = CONFIG.margin * 3 + CONFIG.headerHeight;
-        if (layout.w <= minW || layout.h <= minH) {
-            alert("表が小さすぎます。幅は " + minW + " px、高さは " + minH + " px より大きくしてください。");
+        if (!(input.gap >= 0)) {
+            alert("マスとマスの間隔には 0 以上の数値を入力してください。");
             return null;
         }
         saveLayout(input);
         return {
             layout: layout,
+            gap: input.gap,
             csvFile: csvFile,
             rows: rows,
             cols: cols,
@@ -493,13 +496,14 @@
             alert("位置と大きさには数値を入力してください（幅・高さは 0 より大きい値）。");
             return null;
         }
-        var minW = CONFIG.margin * 2, minH = CONFIG.margin * 3 + CONFIG.headerHeight;
-        if (layout.w <= minW || layout.h <= minH) {
-            alert("表が小さすぎます。幅は " + minW + " px、高さは " + minH + " px より大きくしてください。");
+        var gap = p.gap === undefined || p.gap === "" ? CONFIG.gap : parseFloat(p.gap);
+        if (!(gap >= 0)) {
+            alert("マスとマスの間隔には 0 以上の数値を入力してください。");
             return null;
         }
         return {
             layout: layout,
+            gap: gap,
             csvFile: csvFile,
             rows: rows,
             cols: cols,
@@ -524,19 +528,6 @@
         return out;
     }
 
-    // 下地の位置と大きさから、ヘッダーとテーブルの位置と大きさを計算する（余白はすべて margin）
-    function layoutSpecs(l) {
-        var m = CONFIG.margin, hh = CONFIG.headerHeight;
-        var top = l.y - l.h / 2;
-        var innerW = l.w - m * 2;
-        var bodyH = l.h - m * 3 - hh;
-        return {
-            outer:  { x: l.x, y: l.y, w: l.w, h: l.h },
-            header: { x: l.x, y: top + m + hh / 2, w: innerW, h: hh },
-            body:   { x: l.x, y: top + m + hh + m + bodyH / 2, w: innerW, h: bodyH }
-        };
-    }
-
     // 前回入力した位置と大きさを読む（なければ初期値）
     function ratioValue(list) {
         return list.selection ? CONFIG.ratios[list.selection.index].value : 1;
@@ -544,7 +535,7 @@
 
     // 前回入力した値（X・Y・幅・高さ・幅の割合・高さの割合）
     function loadLayout() {
-        var l = { x: CONFIG.layout.x, y: CONFIG.layout.y, w: CONFIG.layout.w, h: CONFIG.layout.h, wr: 0, hr: 0 };
+        var l = { x: CONFIG.layout.x, y: CONFIG.layout.y, w: CONFIG.layout.w, h: CONFIG.layout.h, wr: 0, hr: 0, gap: CONFIG.gap };
         var f = new File(CONFIG.settingsFile);
         if (!f.exists) f = new File(CONFIG.oldSettingsFile);
         try {
@@ -554,11 +545,13 @@
                 if (v.length >= 4) {
                     var n = [parseFloat(v[0]), parseFloat(v[1]), parseFloat(v[2]), parseFloat(v[3])];
                     if (!isNaN(n[0]) && !isNaN(n[1]) && n[2] > 0 && n[3] > 0) {
-                        l = { x: n[0], y: n[1], w: n[2], h: n[3], wr: 0, hr: 0 };
+                        l = { x: n[0], y: n[1], w: n[2], h: n[3], wr: 0, hr: 0, gap: CONFIG.gap };
                     }
                     var wr = parseInt(v[4], 10), hr = parseInt(v[5], 10);
                     if (wr >= 0 && wr < CONFIG.ratios.length) l.wr = wr;
                     if (hr >= 0 && hr < CONFIG.ratios.length) l.hr = hr;
+                    var gp = parseFloat(v[6]);  // 1.8.0 から：マスとマスの間隔
+                    if (gp >= 0) l.gap = gp;
                 }
             }
         } catch (e) {}
@@ -569,7 +562,7 @@
         var f = new File(CONFIG.settingsFile);
         try {
             if (f.open("w")) {
-                f.write([l.x, l.y, l.w, l.h, l.wr, l.hr].join(","));
+                f.write([l.x, l.y, l.w, l.h, l.wr, l.hr, l.gap].join(","));
                 f.close();
             }
         } catch (e) {}
@@ -663,7 +656,7 @@
         if (!layer) {
             layer = layerRoot.layers.add();
             layer.name = layerName;
-            // 既存のレイヤーを隠さないように重なり順を整える（下地は一番下、ヘッダーはテーブルのすぐ下）
+            // 既存のレイヤーを隠さないように重なり順を整える（下地は一番下）
             if (layerName === CONFIG.layerNames.outer) {
                 layer.zOrder(ZOrderMethod.SENDTOBACK);
             } else if (tableLayer) {
@@ -767,7 +760,7 @@
         }
     }
 
-    // アートボードを表（下地・ヘッダー・マス）にぴったり合わせる
+    // アートボードを表（下地・マス）にぴったり合わせる
     // ラフのはみ出しも含め、端がぼやけないよう外側に向けて整数の px にそろえる
     function fitArtboardToTable(items, roughApplied) {
         var vb = null;

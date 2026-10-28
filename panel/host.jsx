@@ -177,7 +177,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
     var ROUGH_XML = '<LiveEffect name="Adobe Roughen"><Dict data="R asiz ' + ROUGH_SIZE + ' R size ' + ROUGH_SIZE
                   + ' R absoluteness 1 R dtal 100 R roundness 0 "/></LiveEffect>';  // テーブル自動作成のラフと同じ設定
 
-    // アートボードの表の仕上げ。rough：下地・ヘッダー・マスにラフをかける／raster：土台を 72 ppi の画像 1 枚にする（くっつける）
+    // アートボードの表の仕上げ。rough：下地・マス（1.7.0 までの表はヘッダーも）にラフをかける／raster：土台を 72 ppi の画像 1 枚にする（くっつける）
     //   ラフだけのとき：ラフを「アピアランスを分割」で固定する
     //   画像にするとき：写しを画像にして（書き出す PNG と同じ解像度なので見た目は同じ）「下地」レイヤーのいちばん下に置き、
     //     元の下地・ヘッダー・マスは隠して残す（マスの位置を、文字の大きさ・キャラ画像の調整に使うため）
@@ -196,7 +196,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         }
         if (redone) {
             showShapes(t.outer);
-            showShapes(t.header);
+            if (t.header) showShapes(t.header);
             for (var c = 0; c < t.table.groupItems.length; c++) {
                 var cs = cellShape(t.table.groupItems[c]);
                 if (cs) cs.hidden = false;
@@ -206,7 +206,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         // 下地 → ヘッダー → マス の順（あとのものほど上）
         var items = [];
         collectShapes(t.outer, items);
-        collectShapes(t.header, items);
+        if (t.header) collectShapes(t.header, items);
         for (var g = 0; g < t.table.groupItems.length; g++) {
             var shape = cellShape(t.table.groupItems[g]);
             if (shape) items.push(shape);
@@ -274,7 +274,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         for (var i = layer.pathItems.length - 1; i >= 0; i--) list.push(layer.pathItems[i]);
     }
 
-    // アートボードの上の表：{ outer, header, table（レイヤー）, bounds（下地の外側） }
+    // アートボードの上の表：{ outer, header（1.7.0 までの表だけ。なければ null）, table（レイヤー）, bounds（下地の外側） }
     function tableOnArtboard(doc, board) {
         var r = doc.artboards[board].artboardRect;
         var found = null;
@@ -286,7 +286,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
                 if (n === "ヘッダー") header = container.layers[i];
                 if (n === TABLE_LAYER) table = container.layers[i];
             }
-            if (outer && header && table && outer.pageItems.length) {
+            if (outer && table && outer.pageItems.length) {
                 var b = (outer.pathItems.length ? outer.pathItems[0] : outer.pageItems[0]).geometricBounds;  // 元の下地
                 var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
                 if (cx >= r[0] && cx <= r[2] && cy <= r[1] && cy >= r[3]) { found = { outer: outer, header: header, table: table, bounds: visibleOf(outer) }; return; }
