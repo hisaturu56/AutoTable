@@ -30,7 +30,7 @@ OUT = DIST / "AutoTable_panel.zip"
 ZXP = DIST / "AutoTable.zxp"
 STAGE = DIST / "AutoTable"
 CERT = ROOT / "tools" / "zxp-cert.p12"
-CERT_PASSWORD = "polaroidtable"  # 自己署名の証明書用（秘密の情報ではない。名前を変える前に作った証明書なので古い名前のまま）
+CERT_PASSWORD = "autotable"  # 自己署名の証明書用（秘密の情報ではない）
 
 SCRIPTS = {
     "create_table.jsx": "テーブル自動作成.jsx",
