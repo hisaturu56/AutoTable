@@ -89,6 +89,7 @@
     };
 
     var NUMBER_RE = /^[-+]?[\d,]+(\.\d+)?%?$/;  // 数字だけのマス（%・+・- 付きも）。cellTextInfo を参照
+    var JAPANESE_RE = /[\u3000-\u30FF\u3400-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/;  // 日本語（かな・漢字・全角）。これがなく英数字があるマスは数字のフォント
     var DASH_RE = /^(なし|無し|[-－ー―—‐])$/;      // 「なし」など。半角の「-」にする
     var TEXT_NOTE = "自動の大きさ:";  // マスの文字の note（自動で決めた pt。作り直すときに、調整した文字の大きさの割合を出すのに使う）
     // パネルから呼ばれたときは、パネルの設定を使う（ダイアログは出さない）
@@ -803,18 +804,29 @@
     // マスの文字の種類（1.8.10 から）
     //   数字だけ（%・+・- 付きも。例 280%、+10）→ isNumber。数字のフォント
     //   「なし」「-」「ー」など → 半角の「-」にして、数字のフォント
-    //   文字と数字がまざる（例 攻撃力25%アップ、CT 8秒）→ ふつうの文字と同じ（1.8.10 で数字の部分だけ数字のフォントにしたが、1.8.11 でやめた）
+    //   日本語がなく英数字だけ（例 Lv.1→20、HP、CT 8）→ 数字のフォント・数字の大きさ（1.8.12 から）
+    //   日本語と数字がまざる（例 攻撃力25%アップ、Sランク）→ ふつうの文字と同じ（1.8.10 で数字の部分だけ数字のフォントにしたが、1.8.11 でやめた）
     function cellTextInfo(value) {
         var text = trim(String(value));
         if (DASH_RE.test(text)) return { text: "-", isNumber: true };
         if (CONFIG.text.formatNumbers) text = formatNumber(text);
-        return { text: text, isNumber: NUMBER_RE.test(text) };
+        return { text: text, isNumber: isNumberText(text) };
+    }
+
+    function isNumberText(text) {
+        return NUMBER_RE.test(text) || text === "-" || (!JAPANESE_RE.test(text) && /[A-Za-z0-9]/.test(text));
     }
 
     function newCellText(container, info) {
         var tf = container.textFrames.add();
         tf.contents = info.text;
         styleText(tf, info.isNumber ? numberFont : textFont, info.isNumber ? CONFIG.number.size : CONFIG.text.size);
+        // 数字のフォントにない記号（→ など）は、その文字だけ文字のフォントにする（大きさはそのまま）
+        if (info.isNumber && numberFont && textFont) {
+            for (var i = 0; i < info.text.length; i++) {
+                if (info.text.charCodeAt(i) > 0x24F) tf.textRange.characters[i].characterAttributes.textFont = textFont;
+            }
+        }
         return tf;
     }
 
@@ -1002,7 +1014,7 @@
                         var tf = group.textFrames[k];
                         var auto = tf.note.indexOf(TEXT_NOTE) === 0 ? parseFloat(tf.note.substr(TEXT_NOTE.length)) : NaN;
                         if (!(auto > 0)) continue;
-                        var key = NUMBER_RE.test(tf.contents) || tf.contents === "-" ? "numberRatio" : "textRatio";
+                        var key = isNumberText(tf.contents) ? "numberRatio" : "textRatio";
                         if (t[key] === undefined || (key === "textRatio" && !t.textFound)) {
                             t[key] = tf.textRange.characterAttributes.size / auto;
                             if (key === "textRatio") t.textFound = true;

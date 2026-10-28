@@ -143,8 +143,11 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
                         if (cx < r[0] || cx > r[2] || cy > r[1] || cy < r[3]) continue;
                         for (var t = 0; t < group.textFrames.length; t++) {
                             var tf = group.textFrames[t];
-                            // 数字だけのマス（%・+・- 付きも。「なし」は「-」で入っている。テーブル自動作成の cellTextInfo と同じ決まり）
-                            list.push({ tf: tf, cx: cx, cy: cy, isNumber: /^[-+]?[\d,]+(\.\d+)?%?$/.test(tf.contents) || tf.contents === "-" });
+                            // 数字のフォントのマス（テーブル自動作成の isNumberText と同じ決まり）：数字だけ（%・+・- 付きも）・「-」（なし）・日本語がなく英数字があるもの
+                            var c = tf.contents;
+                            var isNumber = /^[-+]?[\d,]+(\.\d+)?%?$/.test(c) || c === "-"
+                                        || (!/[\u3000-\u30FF\u3400-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/.test(c) && /[A-Za-z0-9]/.test(c));
+                            list.push({ tf: tf, cx: cx, cy: cy, isNumber: isNumber });
                         }
                     }
                 }
