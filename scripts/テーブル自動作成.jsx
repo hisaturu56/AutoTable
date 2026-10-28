@@ -68,7 +68,7 @@
         autoColumnWidth: true,
         text: {
             family: "Noto Sans JP", style: "Black",
-            size: 40,                  // 基準の大きさ（参考画像の「タフィー」の高さ 約 36 px に合わせた値）
+            size: 36,                  // 基準の大きさ（1.8.5 で 40 → 36 に小さくした。数字の 46 はそのまま）
             padding: 12,               // マスの左右に空ける余白
             formatNumbers: true        // 数字だけの値に 3 桁区切りのカンマを付ける（3088 → 3,088）
         },
@@ -263,7 +263,8 @@
     var carriedImages = 0, carriedText = false;
     if (carried) {
         carriedImages = moveCarriedImages(carried, layerRoot, charBoxes);
-        carriedText = applyTextRatio(cellTexts, carried.textRatio);
+        carriedText = applyTextRatio(cellTexts, carried.textFound ? carried.textRatio : carried.numberRatio,
+                                     carried.numberRatio !== undefined ? carried.numberRatio : carried.textRatio);
     }
 
     var roughFailed = false;
@@ -400,7 +401,7 @@
         gapInput.characters = 7;
         g7.add("statictext", undefined, "px");
         var g8 = layoutPanel.add("group");
-        var marginCheck = g8.add("checkbox", undefined, "まわりに余白を空ける（下地のフチとマスの間）：");
+        var marginCheck = g8.add("checkbox", undefined, "外枠の余白を空ける（下地のフチとマスの間）：");
         marginCheck.value = saved.marginOn;
         var marginInput = g8.add("edittext", undefined, String(saved.margin));
         marginInput.characters = 7;
@@ -563,11 +564,11 @@
     function marginOption(on, size, layout) {
         if (!on) return 0;
         if (!(size >= 0)) {
-            alert("まわりの余白には 0 以上の数値を入力してください。");
+            alert("外枠の余白には 0 以上の数値を入力してください。");
             return false;
         }
         if (size * 2 >= layout.w || size * 2 >= layout.h) {
-            alert("まわりの余白が大きすぎます。表全体の幅・高さの半分より小さくしてください。");
+            alert("外枠の余白が大きすぎます。表全体の幅・高さの半分より小さくしてください。");
             return false;
         }
         return size;
@@ -982,11 +983,15 @@
                     var m = /^行(\d+)_キャラ$/.exec(group.name);
                     var shape = m ? oldCellShape(group) : null;
                     if (shape) t.boxes[m[1]] = oldCellBox(shape);
-                    if (t.textRatio === 1) {
-                        for (var k = 0; k < group.textFrames.length; k++) {
-                            var tf = group.textFrames[k];
-                            var auto = tf.note.indexOf(TEXT_NOTE) === 0 ? parseFloat(tf.note.substr(TEXT_NOTE.length)) : NaN;
-                            if (auto > 0) { t.textRatio = tf.textRange.characterAttributes.size / auto; break; }
+                    // 文字と数字は別々に変えられるので、割合も別々に取る（1.8.5 から）
+                    for (var k = 0; k < group.textFrames.length; k++) {
+                        var tf = group.textFrames[k];
+                        var auto = tf.note.indexOf(TEXT_NOTE) === 0 ? parseFloat(tf.note.substr(TEXT_NOTE.length)) : NaN;
+                        if (!(auto > 0)) continue;
+                        var key = /^-?[\d,]+(\.\d+)?$/.test(tf.contents) ? "numberRatio" : "textRatio";
+                        if (t[key] === undefined || (key === "textRatio" && !t.textFound)) {
+                            t[key] = tf.textRange.characterAttributes.size / auto;
+                            if (key === "textRatio") t.textFound = true;
                         }
                     }
                 }
@@ -1054,10 +1059,15 @@
     }
 
     // 前の表で文字の大きさを変えていれば、同じ割合を新しい表の文字にもかける（マスの中央は保つ）
-    function applyTextRatio(list, ratio) {
-        if (!(ratio > 0) || Math.abs(ratio - 1) < 0.001) return false;
+    // 文字は textRatio、数字は numberRatio をかける
+    function applyTextRatio(list, textRatio, numberRatio) {
+        if (!(textRatio > 0)) textRatio = 1;
+        if (!(numberRatio > 0)) numberRatio = 1;
+        if (Math.abs(textRatio - 1) < 0.001 && Math.abs(numberRatio - 1) < 0.001) return false;
         for (var i = 0; i < list.length; i++) {
             var t = list[i];
+            var ratio = t.isNumber ? numberRatio : textRatio;
+            if (Math.abs(ratio - 1) < 0.001) continue;
             var cx = t.left + t.w / 2, cy = t.top - t.h / 2;
             var a = t.tf.anchor;
             t.tf.textRange.characterAttributes.size = t.tf.textRange.characterAttributes.size * ratio;

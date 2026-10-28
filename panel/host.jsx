@@ -11,7 +11,6 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
     var IMAGE_LAYER = "キャラ画像";
     var TABLE_LAYER = "テーブル";
     var ROUGH_SIZE = 1;  // ラフの大きさ（px。テーブル自動作成の CONFIG.rough.size と同じ）
-    var NUMBER_RATIO = 46 / 40;  // 数字の大きさ ÷ 文字の大きさ（テーブル自動作成の CONFIG と同じ割合）
     var MATERIAL_FOLDER = "素材";
     var IMAGE_FILTER = "画像:*.png;*.jpg;*.jpeg;*.psd;*.tif;*.tiff;*.ai;*.eps;*.pdf;*.svg";
 
@@ -90,29 +89,31 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
 
     // ---- 文字の大きさ ----
 
-    // アートボードの表の文字の今の大きさ（文字・数字の pt）
+    // アートボードの表の文字の今の大きさ（文字・数字の pt。なければ null）と、それぞれの数
     function getTextSize(board) {
         var doc = activeDoc();
         if (!doc || !doc.artboards[board]) return json(null);
         var texts = tableTexts(doc, board);
-        if (!texts.length) return json({ count: 0 });
-        var text = null;
-        for (var i = 0; i < texts.length && text === null; i++) {
-            if (!texts[i].isNumber) text = texts[i].tf.textRange.characterAttributes.size;
+        var r = { count: texts.length, text: null, number: null, texts: 0, numbers: 0 };
+        for (var i = 0; i < texts.length; i++) {
+            var size = texts[i].tf.textRange.characterAttributes.size;
+            if (texts[i].isNumber) { r.numbers++; if (r.number === null) r.number = size; }
+            else { r.texts++; if (r.text === null) r.text = size; }
         }
-        if (text === null) text = texts[0].tf.textRange.characterAttributes.size / NUMBER_RATIO;
-        return json({ count: texts.length, text: text, number: text * NUMBER_RATIO });
+        return json(r);
     }
 
-    // アートボードの表の文字を、まとめてこの大きさにする（数字は文字の 46/40 倍）。マスの中央の位置は保つ
-    function setTextSize(board, textPt) {
+    // アートボードの表の文字の大きさを変える。マスの中央の位置は保つ（1.8.5 から文字と数字は別々）
+    //   mode "text"：文字（数字以外）を value pt に／"number"：数字を value pt に／"scale"：全部を今の value 倍に
+    function setTextSize(board, mode, value) {
         var doc = activeDoc();
-        if (!doc || !doc.artboards[board] || !(textPt > 0)) return json(null);
+        if (!doc || !doc.artboards[board] || !(value > 0)) return json(null);
         var texts = tableTexts(doc, board);
         for (var i = 0; i < texts.length; i++) {
             var t = texts[i];
+            if ((mode === "text" && t.isNumber) || (mode === "number" && !t.isNumber)) continue;
             var size = t.tf.textRange.characterAttributes.size;
-            var next = t.isNumber ? textPt * NUMBER_RATIO : textPt;
+            var next = mode === "scale" ? size * value : value;
             var f = next / size;
             if (Math.abs(f - 1) < 0.0001) continue;
             // 文字の形は基準点（中央ぞろえの行の基準点）を中心に f 倍になるので、

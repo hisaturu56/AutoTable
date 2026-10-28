@@ -121,7 +121,7 @@
       <div class="presets" data-for="hp"><button data-v="100">100%</button><button data-v="50">50%</button><button data-v="66.667">3分の2</button><button data-v="33.333">3分の1</button><button data-v="75">4分の3</button><button data-v="25">4分の1</button></div>
       <div class="row"><span id="sizeNote" class="note"></span></div>
       <div class="row"><label class="k">マスの間隔</label><input type="number" id="gap" min="0" step="any"><span class="note">px（マスとマスの間）</span></div>
-      <div class="row"><label class="c" style="white-space:nowrap"><input type="checkbox" id="marginOn">まわり</label><input type="number" id="margin" min="0" step="any"><span class="note">px 空ける（フチとマスの間）</span></div>
+      <div class="row"><label class="c" style="white-space:nowrap"><input type="checkbox" id="marginOn">外枠の余白</label><input type="number" id="margin" min="0" step="any"><span class="note">px 空ける（下地のフチとマスの間）</span></div>
       <button id="layoutReset">初期値に戻す</button>
     </fieldset>
 
@@ -154,7 +154,9 @@
 
     <fieldset>
       <legend>文字の大きさ（チェックした表の文字すべて）</legend>
+      <div class="row"><label class="k">全体 %</label><input type="range" id="scaleR" min="50" max="150" step="1"><input type="number" id="scaleN" step="any"></div>
       <div class="row"><label class="k">文字 pt</label><input type="range" id="textR" min="10" max="80" step="0.5"><input type="number" id="textN" step="any"></div>
+      <div class="row"><label class="k">数字 pt</label><input type="range" id="numR" min="10" max="80" step="0.5"><input type="number" id="numN" step="any"></div>
       <div class="row"><span id="textNote" class="note"></span></div>
     </fieldset>
 
@@ -670,45 +672,63 @@
   // ---- 文字の大きさ（チェックした表すべて。表示はいちばん上の表の大きさ） ----
 
   function loadText() {
+    resetScale();
     var boards = checkedBoards();
     if (!boards.length) { showText(null); return; }
     call("PT.getTextSize(" + boards[0] + ")", showText);
   }
 
+  // 全体 % は、表を選び直したときの大きさを 100% として、文字と数字をまとめて同じ割合で変える
+  var scaleApplied = 100;
   function showText(v) {
-    var has = v && v.count > 0;
-    $("textR").disabled = $("textN").disabled = !has;
-    if (!has) { $("textNote").textContent = checkedBoards().length ? "この表には文字がありません" : "対象の表にチェックを入れてください"; return; }
-    if (!textDragging) $("textR").value = v.text;
-    $("textN").value = round(v.text);
+    var hasText = v && v.text !== null && v.text !== undefined;
+    var hasNum = v && v.number !== null && v.number !== undefined;
+    $("textR").disabled = $("textN").disabled = !hasText;
+    $("numR").disabled = $("numN").disabled = !hasNum;
+    $("scaleR").disabled = $("scaleN").disabled = !(hasText || hasNum);
+    if (!hasText && !hasNum) {
+      $("textNote").textContent = checkedBoards().length ? "この表には文字がありません" : "対象の表にチェックを入れてください";
+      return;
+    }
+    if (hasText) { if (dragging !== "text") $("textR").value = v.text; $("textN").value = round(v.text); } else { $("textN").value = ""; }
+    if (hasNum) { if (dragging !== "number") $("numR").value = v.number; $("numN").value = round(v.number); } else { $("numN").value = ""; }
+    if (dragging !== "scale") $("scaleR").value = scaleApplied;
+    $("scaleN").value = round(scaleApplied);
     var n = checkedBoards().length;
-    $("textNote").textContent = "数字は " + round(v.number) + " pt（文字の 46/40 倍）。" + (n > 1 ? "チェックした " + n + " 個の表の文字をまとめて変えます" : v.count + " 個の文字をまとめて変えます");
+    $("textNote").textContent = (n > 1 ? "チェックした " + n + " 個の表の文字をまとめて変えます。" : "文字 " + v.texts + " 個・数字 " + v.numbers + " 個。")
+      + "全体 % は文字と数字を同じ割合で変えます";
   }
+  function resetScale() { scaleApplied = 100; $("scaleR").value = 100; $("scaleN").value = 100; }
 
-  var textDragging = false, textSending = false, textPending = null;
-  function sendText(pt) {
-    if (!(pt > 0)) return;
-    if (textSending) { textPending = pt; return; }
+  var dragging = null, textSending = false, textPending = null;
+  // mode："text"・"number"（pt）／"scale"（全体 %）
+  function sendText(mode, value) {
+    if (!(value > 0)) return;
+    if (textSending) { textPending = { mode: mode, value: value }; return; }
     var boards = checkedBoards();
     if (!boards.length) return;
+    var arg2 = value;
+    if (mode === "scale") { arg2 = value / scaleApplied; scaleApplied = value; }
     textSending = true;
     var first = null;
     (function next(i) {
       if (i >= boards.length) {
         textSending = false;
         showText(first);
-        if (textPending !== null) { var p = textPending; textPending = null; sendText(p); }
+        if (textPending !== null) { var p = textPending; textPending = null; sendText(p.mode, p.value); }
         return;
       }
-      call("PT.setTextSize(" + boards[i] + ", " + arg(pt) + ")", function (v) {
+      call("PT.setTextSize(" + boards[i] + ", " + arg(mode) + ", " + arg(arg2) + ")", function (v) {
         if (i === 0) first = v;
         next(i + 1);
       });
     })(0);
   }
-  $("textR").addEventListener("input", function () { textDragging = true; sendText(parseFloat(this.value)); });
-  $("textR").addEventListener("change", function () { textDragging = false; });
-  $("textN").addEventListener("change", function () { sendText(parseFloat(this.value)); });
+  [["scale", "scaleR", "scaleN"], ["text", "textR", "textN"], ["number", "numR", "numN"]].forEach(function (c) {
+    $(c[1]).addEventListener("input", function () { dragging = c[0]; sendText(c[0], parseFloat(this.value)); });
+    $(c[1]).addEventListener("change", function () { dragging = null; });
+    $(c[2]).addEventListener("change", function () { sendText(c[0], parseFloat(this.value)); });
+  });
 
   // ---- キャラ画像 ----
 
