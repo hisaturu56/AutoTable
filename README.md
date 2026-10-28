@@ -3,7 +3,16 @@
 Illustrator で、キャラクター用の基礎ステータス表を自動で作成するスクリプトです。
 動画（無限大ANANTA の解説動画など）で使う表を、文字と画像まで入れて PNG で書き出すところまで行います。
 
-今のパネルのバージョン：**1.8.14**（2026-10-28 ヘッダーと外側の余白をなくし、マスの間隔を変えられるようにした。列の幅を文字の長さに自動で合わせる。お試し。1.9.x の色付きの枠は試したがやめた。1.7.0 は GitHub のブランチ `save-1.7.0` に残してある）
+今のパネルのバージョン：**1.8.14**（2026-10-28）
+
+1.7.0 からの主な変更（くわしくは `docs/開発記録.md`）：
+- ヘッダーの帯をなくし、マスを下地いっぱいに並べる。マスの間隔・外枠の余白（あり／なし）を設定できる。初期値はマスの部分 1490 × 540
+- 列の幅を文字の長さに自動で合わせる（数字の列は同じ幅）
+- 文字を少し小さく（36pt）。「調整」タブで 全体 %・文字 pt・数字 pt を別々に変えられる
+- 数字・%・レベル（Lv.1→20）・英数字だけのマスと「なし」（→ `-`）は Bahnschrift。日本語がまざったマスは元の文字のフォント
+- パネルの X・Y と「アートボードを表に合わせる」の欄をなくした（いつも中心に作り、アートボードを表に合わせる）
+
+1.7.0 は GitHub のブランチ `save-1.7.0` に残してあります（そのブランチの `download/AutoTable.zxp` を入れれば戻せる）。
 
 ## ふだんの使い方（流れ）
 
@@ -24,6 +33,19 @@ Illustrator で、キャラクター用の基礎ステータス表を自動で�
 全部まとめてほしいときは、このページの上の緑の「Code」→「Download ZIP」で、リポジトリ全体を zip でダウンロードできます。
 
 入れたら Illustrator を再起動して、「ウィンドウ」→「エクステンション」→「テーブル自動作成」を開きます。
+
+## ローカルで作業するとき（Claude Code など）
+
+1. リポジトリを取ってくる
+   - git を使う：`git clone https://github.com/hisaturu56/AutoTable.git`
+   - git を使わない：GitHub のページの緑の「Code」→「Download ZIP」（[直接のリンク](https://github.com/hisaturu56/AutoTable/archive/refs/heads/main.zip)）。ただし zip だと、直したものを GitHub に戻すのに git が必要
+2. 直したら、パネルのファイルを作り直す：`python tools/build_panel.py`（`dist/` と `download/AutoTable.zxp` ができる）
+   - いるもの：Python 3、Java 17 以降（署名に使う。`java` と `keytool` が使えること）
+   - 署名用の証明書 `tools/zxp-cert.p12` は git に入っていないので、最初の 1 回は自動で新しく作られる（ZXP UXP installer で入れるのには問題ない）
+3. `download/AutoTable.zxp` を ZXP UXP installer で入れて、Illustrator を再起動して確かめる
+4. 確かめられたら、README・`docs/開発記録.md` も直して GitHub に上げる（決まりは `CLAUDE.md`）
+- `.jsx` は UTF-8（BOM 付き）のまま保存する（BOM がないと Windows 版 Illustrator で日本語が化ける）
+- Notion の部分を直したら `node tests/notion_test.js` でテストする（Node.js がいる）
 
 ## パネル（おすすめ）
 

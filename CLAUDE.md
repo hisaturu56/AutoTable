@@ -7,7 +7,8 @@ Illustrator 用の基礎ステータス表作成スクリプト（`scripts/テ�
 - スクリプトを変えたら README.md・docs/開発記録.md（必要なら docs/計画.md）も一緒に更新し、コミットして main に push する
 - **スクリプトを変えたら毎回、`python3 tools/build_panel.py` でパネルの `.zxp` を作り直し（`download/` にもコピーされるので一緒にコミットする）、 SendUserFile でユーザーに送り、入れ替え方（ダウンロード → ZXP UXP installer にドラッグ＆ドロップ → Illustrator 再起動）を説明する**（ユーザーの希望。ユーザーはパネルを ZXP UXP installer で管理する。予備の zip・install.bat はなくした）
 - `.jsx` は UTF-8（BOM 付き）のまま保つ（Windows 版 Illustrator で日本語が文字化けしないように）
-- 作業環境に Illustrator はないので、確認できるのは構文チェックまで。実機での確認はユーザーに依頼する
+- クラウドの作業環境には Illustrator がないので、確認できるのは構文チェックまで。実機での確認はユーザーに依頼する
+- 2026-10-28 からはユーザーの PC（ローカル）で作業する予定。ローカルなら Illustrator で実際に試せることがある（パネルの入れ替えは ZXP UXP installer。手順は README の「ローカルで作業するとき」）。ビルドには Python 3 と Java 17 以降（java・keytool）がいる。証明書 `tools/zxp-cert.p12` は git にないので、ローカルで最初にビルドしたときに新しく作られる
 
 ## 決まっていること・注意点
 - **名前は「テーブル自動作成」（英語は AutoTable、ID は `com.hisaturu.autotable`）**。1.6.3 までは「ポロライドテーブル自動作成」（PolaroidTable、`com.hisaturu.polaroidtable`）。トークンと位置・大きさの値は古い場所（`%APPDATA%\PolaroidTable\`・`PolaroidTable_layout.txt`）も読む。GitHub のリポジトリ名も AutoTable に変わった（hisaturu56/AutoTable）
