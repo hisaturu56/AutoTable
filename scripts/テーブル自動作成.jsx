@@ -62,6 +62,9 @@
         // 基準のマスの高さ。参考画像では 3〜7 行まで文字の大きさは同じ（高さ 約 36 px）だったので、
         // 7 行のマスの高さ（1.7.0 までの初期値の表で 70.714 px）までは size のまま、これより低いマスで縮め始める
         refCellHeight: 70.714,
+        // 列の幅を文字の長さに合わせる（1.8.2 から）。長い文字の列を広げ、残りの列で分ける。
+        // 全部が均等な幅に入るときは今までどおり均等。false にすると、いつも均等な幅
+        autoColumnWidth: true,
         text: {
             family: "Noto Sans JP", style: "Black",
             size: 40,                  // 基準の大きさ（参考画像の「タフィー」の高さ 約 36 px に合わせた値）
@@ -217,7 +220,13 @@
 
     var statX = opts.character ? body.left + cellH + gap : body.left;
     var statW = (body.left + body.w) - statX;
-    var colW  = (statW - gap * (opts.cols - 1)) / opts.cols;
+    var colW  = (statW - gap * (opts.cols - 1)) / opts.cols;  // 均等にしたときの列の幅
+    var colWidths = CONFIG.autoColumnWidth && data ? columnWidths(colW * opts.cols) : null;
+    var colLefts = [];
+    for (var cl = 0, x0 = statX; cl < opts.cols; cl++) {
+        colLefts.push(x0);
+        x0 += (colWidths ? colWidths[cl] : colW) + gap;
+    }
 
     if (cellH <= 0 || colW <= 0) {
         alert("マスのサイズが0以下になります。行数・列数か、マスとマスの間隔を減らしてください。");
@@ -241,10 +250,10 @@
             col = 1;
         }
         for (var c = 0; c < opts.cols; c++) {
-            var left = statX + c * (colW + gap);
-            var cell = makeCell("行" + (r + 1) + "_列" + (c + 1), top, left, colW, cellH);
+            var left = colLefts[c], w = colWidths ? colWidths[c] : colW;
+            var cell = makeCell("行" + (r + 1) + "_列" + (c + 1), top, left, w, cellH);
             var value = row[col + c];
-            if (value) cellTexts.push(addCellText(cell.group, value, top, left, colW, cellH));
+            if (value) cellTexts.push(addCellText(cell.group, value, top, left, w, cellH));
         }
     }
     if (templateRect) templateRect.remove();  // 元の「テーブル」の長方形はマス目に置き換える
@@ -294,7 +303,7 @@
     var msg = "ステータス表を作成しました（" + opts.rows + "行 × " + opts.cols + "列"
             + (opts.character ? "＋キャラ欄" : "") + (opts.rough ? (roughFixed ? "、ラフあり（固定）" : "、ラフあり") : "、ラフなし") + "）\n"
             + "表全体：" + round(opts.layout.w) + " × " + round(opts.layout.h) + " px\n"
-            + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + round(colW) + " px\n"
+            + "マスの高さ：" + round(cellH) + " px ／ 列幅：" + (colWidths ? colWidthsText() + "（文字の長さに合わせた）" : round(colW)) + " px\n"
             + "文字の大きさ：文字 " + round(CONFIG.text.size * textScale) + " pt ／ 数字 " + round(CONFIG.number.size * textScale) + " pt";
     msg += "\n\nアートボード：" + (abIndex + 1) + "「" + doc.artboards[abIndex].name + "」" + (newArtboard ? "（新しく追加）" : "");
     if (replaced) {
@@ -689,6 +698,63 @@
         p.filled = true;
         p.fillColor = rgbColor(rgb);
         return p;
+    }
+
+    // 列の幅を文字の長さに合わせて決める（合計 total）
+    //   1. 列ごとに、いちばん長い文字が入る幅（マスの高さで決まる文字の大きさで測り、左右の padding を足す）を出す
+    //   2. 均等な幅に入る列は同じ幅のまま、入らない列だけ必要な幅まで広げ、ほかの列を同じだけ狭くする
+    //   3. 全部の列の必要な幅の合計が total を超えるときは、必要な幅の割合で分ける（文字は layoutCellTexts で表全体をまとめて縮める）
+    function columnWidths(total) {
+        var scale = Math.min(1, cellH / CONFIG.refCellHeight);
+        var col0 = opts.character ? 1 : 0;
+        var needs = [], sum = 0;
+        for (var c = 0; c < opts.cols; c++) {
+            var max = 0;
+            for (var r = 0; r < opts.rows; r++) {
+                var v = data[r] ? data[r][col0 + c] : "";
+                if (v) max = Math.max(max, measureText(v) * scale);
+            }
+            needs.push(max ? max + CONFIG.text.padding * 2 : 0);
+            sum += needs[c];
+        }
+        var widths = [];
+        if (sum >= total) {
+            for (var i = 0; i < needs.length; i++) widths.push(total * needs[i] / sum);
+            return widths;
+        }
+        // 必要な幅が「ほかの列で分けた幅」より広い列だけ、必要な幅にする（くり返して決める）
+        var fixed = [], level = total / opts.cols, changed = true;
+        while (changed) {
+            changed = false;
+            var rest = total, free = 0;
+            for (var k = 0; k < needs.length; k++) {
+                if (fixed[k]) rest -= needs[k]; else free++;
+            }
+            level = free ? rest / free : 0;
+            for (var m = 0; m < needs.length; m++) {
+                if (!fixed[m] && needs[m] > level) { fixed[m] = true; changed = true; }
+            }
+        }
+        for (var n = 0; n < needs.length; n++) widths.push(fixed[n] ? needs[n] : level);
+        return widths;
+    }
+
+    // 文字を基準の大きさで置いたときの幅（マスに入れるときと同じ書式で測って、すぐ消す）
+    function measureText(value) {
+        var text = CONFIG.text.formatNumbers ? formatNumber(value) : value;
+        var isNumber = /^-?[\d,]+(\.\d+)?$/.test(text);
+        var tf = tableLayer.textFrames.add();
+        tf.contents = text;
+        styleText(tf, isNumber ? numberFont : textFont, isNumber ? CONFIG.number.size : CONFIG.text.size);
+        var w = tf.width;
+        tf.remove();
+        return w;
+    }
+
+    function colWidthsText() {
+        var list = [];
+        for (var i = 0; i < colWidths.length; i++) list.push(round(colWidths[i]));
+        return list.join("・");
     }
 
     // マスに文字を入れる（大きさと位置は、全部のマスを作ったあとに layoutCellTexts でそろえる）
