@@ -10,6 +10,23 @@
 $.global.PT = (function () {  // $.evalFile で読み込んでも、どこからでも PT で呼べるように
     var IMAGE_LAYER = "キャラ画像";
     var TABLE_LAYER = "テーブル";
+    // 日本語と英数字がまざったマスの、英数字の部分（テーブル自動作成の latinRuns と同じ決まり）。1 文字ずつ true／false
+    function latinFlags(text) {
+        var flags = [], start = -1;
+        for (var i = 0; i < text.length; i++) flags.push(false);
+        for (var j = 0; j <= text.length; j++) {
+            var latin = j < text.length && text.charCodeAt(j) <= 0x24F;
+            if (latin && start < 0) start = j;
+            if (!latin && start >= 0) {
+                var a = start, b = j;
+                while (a < b && text.charAt(a) === " ") a++;
+                while (b > a && text.charAt(b - 1) === " ") b--;
+                if (/[A-Za-z0-9]/.test(text.substring(a, b))) for (var k = a; k < b; k++) flags[k] = true;
+                start = -1;
+            }
+        }
+        return flags;
+    }
     var ROUGH_SIZE = 1;  // ラフの大きさ（px。テーブル自動作成の CONFIG.rough.size と同じ）
     var MATERIAL_FOLDER = "素材";
     var IMAGE_FILTER = "画像:*.png;*.jpg;*.jpeg;*.psd;*.tif;*.tiff;*.ai;*.eps;*.pdf;*.svg";
@@ -96,8 +113,19 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         var texts = tableTexts(doc, board);
         var r = { count: texts.length, text: null, number: null, texts: 0, numbers: 0 };
         for (var i = 0; i < texts.length; i++) {
-            var size = texts[i].tf.textRange.characterAttributes.size;
-            if (texts[i].isNumber) { r.numbers++; if (r.number === null) r.number = size; }
+            var t = texts[i];
+            if (t.numberFlags) {
+                // 日本語と英数字がまざったマス：日本語の部分と英数字の部分の大きさを別々に見る
+                r.texts++;
+                for (var k = 0; k < t.numberFlags.length; k++) {
+                    var cs = t.tf.textRange.characters[k].characterAttributes.size;
+                    if (t.numberFlags[k]) { if (r.number === null) r.number = cs; }
+                    else if (r.text === null) r.text = cs;
+                }
+                continue;
+            }
+            var size = t.tf.textRange.characterAttributes.size;
+            if (t.isNumber) { r.numbers++; if (r.number === null) r.number = size; }
             else { r.texts++; if (r.text === null) r.text = size; }
         }
         return json(r);
@@ -111,6 +139,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         var texts = tableTexts(doc, board);
         for (var i = 0; i < texts.length; i++) {
             var t = texts[i];
+            if (t.numberFlags) { setMixedSize(t, mode, value); continue; }
             if ((mode === "text" && t.isNumber) || (mode === "number" && !t.isNumber)) continue;
             var size = t.tf.textRange.characterAttributes.size;
             var next = mode === "scale" ? size * value : value;
@@ -124,6 +153,24 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         }
         app.redraw();
         return getTextSize(board);
+    }
+
+    // 日本語と英数字がまざったマス：1 文字ずつ、日本語の部分・英数字の部分のどちらかを変える
+    // 英数字の部分の下げる量（baselineShift）も大きさと同じ割合で変える
+    // 位置は、最初に変えた文字の倍率で、マスの中央に保つ（日本語と英数字の倍率が違うときは少しずれることがある）
+    function setMixedSize(t, mode, value) {
+        var f = null, a = t.tf.anchor;
+        for (var k = 0; k < t.numberFlags.length; k++) {
+            var isNum = t.numberFlags[k];
+            if ((mode === "text" && isNum) || (mode === "number" && !isNum)) continue;
+            var attr = t.tf.textRange.characters[k].characterAttributes;
+            var size = attr.size;
+            var next = mode === "scale" ? size * value : value;
+            if (f === null) f = next / size;
+            if (isNum) attr.baselineShift = attr.baselineShift * next / size;
+            attr.size = next;
+        }
+        if (f !== null && Math.abs(f - 1) >= 0.0001) t.tf.translate((t.cx - a[0]) * (1 - f), (t.cy - a[1]) * (1 - f));
     }
 
     // アートボードの中にある「テーブル」レイヤーのマスの文字（マスの中心も一緒に）
@@ -147,7 +194,10 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
                             var c = tf.contents;
                             var isNumber = /^[-+]?[\d,]+(\.\d+)?%?$/.test(c) || c === "-"
                                         || (!/[\u3000-\u30FF\u3400-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/.test(c) && /[A-Za-z0-9]/.test(c));
-                            list.push({ tf: tf, cx: cx, cy: cy, isNumber: isNumber });
+                            var flags = isNumber ? null : latinFlags(c);
+                            var mixed = false;
+                            if (flags) for (var k = 0; k < flags.length; k++) if (flags[k]) mixed = true;
+                            list.push({ tf: tf, cx: cx, cy: cy, isNumber: isNumber, numberFlags: mixed ? flags : null });
                         }
                     }
                 }

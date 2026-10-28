@@ -91,6 +91,7 @@
     var NUMBER_RE = /^[-+]?[\d,]+(\.\d+)?%?$/;  // 数字だけのマス（%・+・- 付きも）。cellTextInfo を参照
     var JAPANESE_RE = /[\u3000-\u30FF\u3400-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/;  // 日本語（かな・漢字・全角）。これがなく英数字があるマスは数字のフォント
     var DASH_RE = /^(なし|無し|[-－ー―—‐])$/;      // 「なし」など。半角の「-」にする
+    var mixedShiftValue = null;  // まざったマスの数字・英語を下げる量（基準の大きさのとき。mixedShift で一度だけ測る）
     var TEXT_NOTE = "自動の大きさ:";  // マスの文字の note（自動で決めた pt。作り直すときに、調整した文字の大きさの割合を出すのに使う）
     // パネルから呼ばれたときは、パネルの設定を使う（ダイアログは出さない）
     var panelMode = !!$.global.PT_CREATE_OPTIONS;
@@ -805,12 +806,68 @@
     //   数字だけ（%・+・- 付きも。例 280%、+10）→ isNumber。数字のフォント
     //   「なし」「-」「ー」など → 半角の「-」にして、数字のフォント
     //   日本語がなく英数字だけ（例 Lv.1→20、HP、CT 8）→ 数字のフォント・数字の大きさ（1.8.12 から）
-    //   日本語と数字がまざる（例 攻撃力25%アップ、Sランク）→ ふつうの文字と同じ（1.8.10 で数字の部分だけ数字のフォントにしたが、1.8.11 でやめた）
+    //   日本語と英数字がまざる（例 CT 8秒、攻撃力25%アップ）→ 英数字の部分（runs：[始まり, 長さ]）だけ数字のフォント・数字の大きさにして、
+    //     上下の真ん中が日本語とそろうように下げる（1.8.13 から。1.8.10〜1.8.11 で試した形に、高さ合わせを足した）
+    //   名前の中の数字（四段攻撃 など）は、データを書くときに漢字にしてもらう（Claudeへの説明_テーブルリスト.md）
     function cellTextInfo(value) {
         var text = trim(String(value));
-        if (DASH_RE.test(text)) return { text: "-", isNumber: true };
+        if (DASH_RE.test(text)) return { text: "-", isNumber: true, runs: [] };
         if (CONFIG.text.formatNumbers) text = formatNumber(text);
-        return { text: text, isNumber: isNumberText(text) };
+        if (isNumberText(text)) return { text: text, isNumber: true, runs: [] };
+        return { text: text, isNumber: false, runs: latinRuns(text) };
+    }
+
+    // 英数字・記号（日本語でない文字）が続くところのうち、英数字を含むもの。前後の空白は除く
+    function latinRuns(text) {
+        var runs = [], start = -1;
+        for (var i = 0; i <= text.length; i++) {
+            var latin = i < text.length && text.charCodeAt(i) <= 0x24F;
+            if (latin && start < 0) start = i;
+            if (!latin && start >= 0) {
+                var a = start, b = i;
+                while (a < b && text.charAt(a) === " ") a++;
+                while (b > a && text.charAt(b - 1) === " ") b--;
+                if (/[A-Za-z0-9]/.test(text.substring(a, b))) runs.push([a, b - a]);
+                start = -1;
+            }
+        }
+        return runs;
+    }
+
+    // まざったマスの大きさを付ける。英数字の部分は数字のフォント・数字の大きさにして、上下の真ん中を日本語にそろえる
+    function applyCellSizes(tf, info, textPt, numberPt) {
+        tf.textRange.characterAttributes.size = info.isNumber ? numberPt : textPt;
+        var shift = mixedShift() * numberPt / CONFIG.number.size;
+        for (var i = 0; i < info.runs.length; i++) {
+            for (var k = info.runs[i][0]; k < info.runs[i][0] + info.runs[i][1]; k++) {
+                var attr = tf.textRange.characters[k].characterAttributes;
+                if (numberFont) attr.textFont = numberFont;
+                attr.size = numberPt;
+                attr.baselineShift = shift;
+            }
+        }
+    }
+
+    // 「漢」（文字のフォント・基準の大きさ）と「0」（数字のフォント・基準の大きさ）の形の上下の真ん中の差（pt。マイナスは下げる）
+    function mixedShift() {
+        if (mixedShiftValue !== null) return mixedShiftValue;
+        mixedShiftValue = 0;
+        if (!numberFont || !textFont) return 0;
+        var a = null, b = null;
+        try {
+            a = tableLayer.textFrames.add();
+            a.contents = "漢";
+            styleText(a, textFont, CONFIG.text.size);
+            b = tableLayer.textFrames.add();
+            b.contents = "0";
+            styleText(b, numberFont, CONFIG.number.size);
+            var ba = outlineBounds(a, null), bb = outlineBounds(b, null);
+            mixedShiftValue = ((ba[1] + ba[3]) / 2 - a.anchor[1]) - ((bb[1] + bb[3]) / 2 - b.anchor[1]);
+        } catch (e) {
+            mixedShiftValue = 0;
+        }
+        try { if (a) a.remove(); if (b) b.remove(); } catch (e2) {}
+        return mixedShiftValue;
     }
 
     function isNumberText(text) {
@@ -821,6 +878,7 @@
         var tf = container.textFrames.add();
         tf.contents = info.text;
         styleText(tf, info.isNumber ? numberFont : textFont, info.isNumber ? CONFIG.number.size : CONFIG.text.size);
+        if (info.runs.length) applyCellSizes(tf, info, CONFIG.text.size, CONFIG.number.size);
         // 数字のフォントにない記号（→ など）は、その文字だけ文字のフォントにする（大きさはそのまま）
         if (info.isNumber && numberFont && textFont) {
             for (var i = 0; i < info.text.length; i++) {
@@ -867,9 +925,10 @@
 
         for (var j = 0; j < list.length; j++) {
             var t = list[j];
-            var base = t.isNumber ? CONFIG.number.size : CONFIG.text.size;
-            t.tf.textRange.characterAttributes.size = base * scale;
-            t.tf.note = TEXT_NOTE + base * scale;  // 自動で決めた大きさ（作り直すときに、調整した割合を引き継ぐため）
+            t.textPt = CONFIG.text.size * scale;
+            t.numberPt = CONFIG.number.size * scale;
+            applyCellSizes(t.tf, t.info, t.textPt, t.numberPt);
+            t.tf.note = TEXT_NOTE + (t.isNumber ? t.numberPt : t.textPt);  // 自動で決めた大きさ（作り直すときに、調整した割合を引き継ぐため）
             alignCellText(t, scale);
         }
         return scale;
@@ -1014,6 +1073,7 @@
                         var tf = group.textFrames[k];
                         var auto = tf.note.indexOf(TEXT_NOTE) === 0 ? parseFloat(tf.note.substr(TEXT_NOTE.length)) : NaN;
                         if (!(auto > 0)) continue;
+                        if (!isNumberText(tf.contents) && /[A-Za-z0-9]/.test(tf.contents)) continue;  // まざったマスは割合を取るのに使わない
                         var key = isNumberText(tf.contents) ? "numberRatio" : "textRatio";
                         if (t[key] === undefined || (key === "textRatio" && !t.textFound)) {
                             t[key] = tf.textRange.characterAttributes.size / auto;
@@ -1092,6 +1152,14 @@
         if (Math.abs(textRatio - 1) < 0.001 && Math.abs(numberRatio - 1) < 0.001) return false;
         for (var i = 0; i < list.length; i++) {
             var t = list[i];
+            if (t.info.runs.length) {
+                // 日本語と英数字がまざったマス：日本語と英数字の部分にそれぞれの割合をかけて、置き直す
+                t.textPt *= textRatio;
+                t.numberPt *= numberRatio;
+                applyCellSizes(t.tf, t.info, t.textPt, t.numberPt);
+                alignCellText(t, textRatio);
+                continue;
+            }
             var ratio = t.isNumber ? numberRatio : textRatio;
             if (Math.abs(ratio - 1) < 0.001) continue;
             var cx = t.left + t.w / 2, cy = t.top - t.h / 2;
