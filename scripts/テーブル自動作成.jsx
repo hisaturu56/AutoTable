@@ -24,7 +24,8 @@
         layout: { x: 960, y: 540, w: 1490, h: 540 },     // 初期値（1.8.7 から）：1.7.0 までのマスの部分と同じ大きさで、アートボード（1920×1080）の中心
         // マスは下地いっぱいに並べる（ヘッダーと、下地のフチとマスの間の余白は 1.8.0 でなくした）。下地はマスとマスの間にだけ見える
         gap: 7.5,                      // マス同士の間隔の初期値。実行時のダイアログ・パネルで変えられる
-        margin: { enabled: false, size: 7.5 },  // 下地のフチとマスの間の余白（1.8.4 から。あり／なし・px）の初期値。ダイアログ・パネルで変えられる
+        margin: { enabled: false, size: 7.5 },  // 外枠の余白（下地のフチとマスの間。1.8.4 から。あり／なし・px）の初期値。ダイアログ・パネルで変えられる
+                                                // ありのときは、入力した大きさのマスのまわりに余白の分だけ下地を広げる（1.8.8 から。1490×540 なら 1505×555）
         // 幅・高さの割合（ダイアログのプルダウン）。入力した幅・高さにこの割合をかけた大きさで作る
         ratios: [
             { label: "100%（そのまま）", value: 1 },
@@ -202,7 +203,7 @@
     doc.artboards[abIndex].name = uniqueArtboardName(tableName, abIndex);
 
     // 下から 下地 → テーブル の順に重なるように作る。マスは下地いっぱいに並べる
-    var specs = { outer: opts.layout, body: opts.margin ? insetSpec(opts.layout, opts.margin) : opts.layout };  // margin：まわりの余白（なしは 0）
+    var specs = { outer: opts.margin ? expandSpec(opts.layout, opts.margin) : opts.layout, body: opts.layout };  // margin：外枠の余白（なしは 0）。下地を外へ広げる
     var outerRect = existingOrNewRect(CONFIG.layerNames.outer, specs.outer, CONFIG.colors.outer);
     var gap = opts.gap;
     var body;
@@ -567,16 +568,12 @@
             alert("外枠の余白には 0 以上の数値を入力してください。");
             return false;
         }
-        if (size * 2 >= layout.w || size * 2 >= layout.h) {
-            alert("外枠の余白が大きすぎます。表全体の幅・高さの半分より小さくしてください。");
-            return false;
-        }
         return size;
     }
 
-    // 位置と大きさ（中心・幅・高さ）を、まわりから d だけ内側に縮める
-    function insetSpec(l, d) {
-        return { x: l.x, y: l.y, w: l.w - d * 2, h: l.h - d * 2 };
+    // 位置と大きさ（中心・幅・高さ）を、まわりに d だけ広げる
+    function expandSpec(l, d) {
+        return { x: l.x, y: l.y, w: l.w + d * 2, h: l.h + d * 2 };
     }
 
     // 前回入力した値（X・Y・幅・高さ・幅の割合・高さの割合・マスの間隔・まわりの余白のあり／なし・余白）
