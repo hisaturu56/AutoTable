@@ -24,6 +24,7 @@
         layout: { x: 960, y: 540, w: 1505, h: 592.5 },   // 初期値はアートボード（1920×1080）の中心
         // マスは下地いっぱいに並べる（ヘッダーと、下地のフチとマスの間の余白は 1.8.0 でなくした）。下地はマスとマスの間にだけ見える
         gap: 7.5,                      // マス同士の間隔の初期値。実行時のダイアログ・パネルで変えられる
+        margin: { enabled: false, size: 7.5 },  // 下地のフチとマスの間の余白（1.8.4 から。あり／なし・px）の初期値。ダイアログ・パネルで変えられる
         // 幅・高さの割合（ダイアログのプルダウン）。入力した幅・高さにこの割合をかけた大きさで作る
         ratios: [
             { label: "100%（そのまま）", value: 1 },
@@ -201,7 +202,7 @@
     doc.artboards[abIndex].name = uniqueArtboardName(tableName, abIndex);
 
     // 下から 下地 → テーブル の順に重なるように作る。マスは下地いっぱいに並べる
-    var specs = { outer: opts.layout, body: opts.layout };
+    var specs = { outer: opts.layout, body: opts.margin ? insetSpec(opts.layout, opts.margin) : opts.layout };  // margin：まわりの余白（なしは 0）
     var outerRect = existingOrNewRect(CONFIG.layerNames.outer, specs.outer, CONFIG.colors.outer);
     var gap = opts.gap;
     var body;
@@ -398,9 +399,17 @@
         var gapInput = g7.add("edittext", undefined, String(saved.gap));
         gapInput.characters = 7;
         g7.add("statictext", undefined, "px");
+        var g8 = layoutPanel.add("group");
+        var marginCheck = g8.add("checkbox", undefined, "まわりに余白を空ける（下地のフチとマスの間）：");
+        marginCheck.value = saved.marginOn;
+        var marginInput = g8.add("edittext", undefined, String(saved.margin));
+        marginInput.characters = 7;
+        g8.add("statictext", undefined, "px");
         layoutPanel.add("statictext", undefined, "※ 下地・テーブルがすでにあるときは、そちらの位置を使います");
         resetBtn.onClick = function () {
             gapInput.text = String(CONFIG.gap);
+            marginCheck.value = CONFIG.margin.enabled;
+            marginInput.text = String(CONFIG.margin.size);
             xInput.text = String(CONFIG.layout.x);
             yInput.text = String(CONFIG.layout.y);
             wInput.text = String(CONFIG.layout.w);
@@ -459,7 +468,8 @@
             w: parseFloat(wInput.text), h: parseFloat(hInput.text),
             wr: wRatioList.selection ? wRatioList.selection.index : 0,
             hr: hRatioList.selection ? hRatioList.selection.index : 0,
-            gap: parseFloat(gapInput.text)
+            gap: parseFloat(gapInput.text),
+            marginOn: marginCheck.value, margin: parseFloat(marginInput.text)
         };
         var layout = {
             x: input.x, y: input.y,
@@ -473,10 +483,13 @@
             alert("マスとマスの間隔には 0 以上の数値を入力してください。");
             return null;
         }
+        var margin = marginOption(input.marginOn, input.margin, layout);
+        if (margin === false) return null;
         saveLayout(input);
         return {
             layout: layout,
             gap: input.gap,
+            margin: margin,
             csvFile: csvFile,
             rows: rows,
             cols: cols,
@@ -510,9 +523,13 @@
             alert("マスとマスの間隔には 0 以上の数値を入力してください。");
             return null;
         }
+        var margin = marginOption(p.marginOn === undefined ? CONFIG.margin.enabled : !!p.marginOn,
+                                  p.margin === undefined || p.margin === "" ? CONFIG.margin.size : parseFloat(p.margin), layout);
+        if (margin === false) return null;
         return {
             layout: layout,
             gap: gap,
+            margin: margin,
             csvFile: csvFile,
             rows: rows,
             cols: cols,
@@ -542,9 +559,29 @@
         return list.selection ? CONFIG.ratios[list.selection.index].value : 1;
     }
 
-    // 前回入力した値（X・Y・幅・高さ・幅の割合・高さの割合）
+    // まわりの余白を確かめて px にする。なしは 0、入力がおかしいときは false
+    function marginOption(on, size, layout) {
+        if (!on) return 0;
+        if (!(size >= 0)) {
+            alert("まわりの余白には 0 以上の数値を入力してください。");
+            return false;
+        }
+        if (size * 2 >= layout.w || size * 2 >= layout.h) {
+            alert("まわりの余白が大きすぎます。表全体の幅・高さの半分より小さくしてください。");
+            return false;
+        }
+        return size;
+    }
+
+    // 位置と大きさ（中心・幅・高さ）を、まわりから d だけ内側に縮める
+    function insetSpec(l, d) {
+        return { x: l.x, y: l.y, w: l.w - d * 2, h: l.h - d * 2 };
+    }
+
+    // 前回入力した値（X・Y・幅・高さ・幅の割合・高さの割合・マスの間隔・まわりの余白のあり／なし・余白）
     function loadLayout() {
         var l = { x: CONFIG.layout.x, y: CONFIG.layout.y, w: CONFIG.layout.w, h: CONFIG.layout.h, wr: 0, hr: 0, gap: CONFIG.gap };
+        l.marginOn = CONFIG.margin.enabled; l.margin = CONFIG.margin.size;
         var f = new File(CONFIG.settingsFile);
         if (!f.exists) f = new File(CONFIG.oldSettingsFile);
         try {
@@ -554,13 +591,16 @@
                 if (v.length >= 4) {
                     var n = [parseFloat(v[0]), parseFloat(v[1]), parseFloat(v[2]), parseFloat(v[3])];
                     if (!isNaN(n[0]) && !isNaN(n[1]) && n[2] > 0 && n[3] > 0) {
-                        l = { x: n[0], y: n[1], w: n[2], h: n[3], wr: 0, hr: 0, gap: CONFIG.gap };
+                        l.x = n[0]; l.y = n[1]; l.w = n[2]; l.h = n[3];
                     }
                     var wr = parseInt(v[4], 10), hr = parseInt(v[5], 10);
                     if (wr >= 0 && wr < CONFIG.ratios.length) l.wr = wr;
                     if (hr >= 0 && hr < CONFIG.ratios.length) l.hr = hr;
                     var gp = parseFloat(v[6]);  // 1.8.0 から：マスとマスの間隔
                     if (gp >= 0) l.gap = gp;
+                    if (v[7] === "0" || v[7] === "1") l.marginOn = v[7] === "1";  // 1.8.4 から：まわりの余白
+                    var mg = parseFloat(v[8]);
+                    if (mg >= 0) l.margin = mg;
                 }
             }
         } catch (e) {}
@@ -571,7 +611,7 @@
         var f = new File(CONFIG.settingsFile);
         try {
             if (f.open("w")) {
-                f.write([l.x, l.y, l.w, l.h, l.wr, l.hr, l.gap].join(","));
+                f.write([l.x, l.y, l.w, l.h, l.wr, l.hr, l.gap, l.marginOn ? 1 : 0, l.margin].join(","));
                 f.close();
             }
         } catch (e) {}

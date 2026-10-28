@@ -120,7 +120,8 @@
       <div class="row"><label class="k">高さの割合 %</label><input type="range" id="hpR" min="10" max="100" step="1"><input type="number" id="hp" min="10" max="100" step="any"></div>
       <div class="presets" data-for="hp"><button data-v="100">100%</button><button data-v="50">50%</button><button data-v="66.667">3分の2</button><button data-v="33.333">3分の1</button><button data-v="75">4分の3</button><button data-v="25">4分の1</button></div>
       <div class="row"><span id="sizeNote" class="note"></span></div>
-      <div class="row"><label class="k">マスの間隔</label><input type="number" id="gap" min="0" step="any"><span class="note">px（マスとマスの間。下地のフチとの間は空けない）</span></div>
+      <div class="row"><label class="k">マスの間隔</label><input type="number" id="gap" min="0" step="any"><span class="note">px（マスとマスの間）</span></div>
+      <div class="row"><label class="c" style="white-space:nowrap"><input type="checkbox" id="marginOn">まわり</label><input type="number" id="margin" min="0" step="any"><span class="note">px 空ける（フチとマスの間）</span></div>
       <button id="layoutReset">初期値に戻す</button>
     </fieldset>
 
@@ -203,7 +204,7 @@
   var cep = window.__adobe_cep__;
   var $ = function (id) { return document.getElementById(id); };
 
-  var DEFAULTS = { x: 960, y: 540, w: 1505, h: 592.5, wp: 100, hp: 100, gap: 7.5,
+  var DEFAULTS = { x: 960, y: 540, w: 1505, h: 592.5, wp: 100, hp: 100, gap: 7.5, marginOn: false, margin: 7.5,
                    fitArtboard: true, overwrite: true, createRough: true, createRaster: true };
   var RATIOS = [
     { label: "100%（そのまま）", value: 1 },
@@ -276,14 +277,14 @@
   // 前の版の割合（プルダウンの番号 wr・hr）が保存されていれば、パーセントに直す
   if (form.wr !== undefined && RATIOS[form.wr] && !form.wpSet) form.wp = Math.round(RATIOS[form.wr].value * 100000) / 1000;
   if (form.hr !== undefined && RATIOS[form.hr] && !form.wpSet) form.hp = Math.round(RATIOS[form.hr].value * 100000) / 1000;
-  ["x", "y", "w", "h", "wp", "hp", "gap"].forEach(function (k) { $(k).value = form[k]; });
+  ["x", "y", "w", "h", "wp", "hp", "gap", "margin"].forEach(function (k) { $(k).value = form[k]; });
   $("wpR").value = form.wp;
   $("hpR").value = form.hp;
-  ["fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) { $(k).checked = !!form[k]; });
+  ["marginOn", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) { $(k).checked = !!form[k]; });
   updateCSV();
   updateSize();
 
-  ["x", "y", "w", "h", "wp", "hp", "gap", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) {
+  ["x", "y", "w", "h", "wp", "hp", "gap", "margin", "marginOn", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) {
     $(k).addEventListener("input", saveForm);
     $(k).addEventListener("change", saveForm);
   });
@@ -322,7 +323,8 @@
   $("csvNone").addEventListener("click", function () { csvs.forEach(function (c) { c.checked = false; }); updateCSV(); });
   $("csvClear").addEventListener("click", function () { csvs = []; updateCSV(); });
   $("layoutReset").addEventListener("click", function () {
-    ["x", "y", "w", "h", "wp", "hp", "gap"].forEach(function (k) { $(k).value = DEFAULTS[k]; });
+    ["x", "y", "w", "h", "wp", "hp", "gap", "margin"].forEach(function (k) { $(k).value = DEFAULTS[k]; });
+    $("marginOn").checked = DEFAULTS.marginOn;
     $("wpR").value = DEFAULTS.wp;
     $("hpR").value = DEFAULTS.hp;
     updateSize();
@@ -334,7 +336,7 @@
     var w = parseFloat($("w").value) * percent("wp");
     var h = parseFloat($("h").value) * percent("hp");
     var base = {
-      x: $("x").value, y: $("y").value, w: w, h: h, gap: $("gap").value,
+      x: $("x").value, y: $("y").value, w: w, h: h, gap: $("gap").value, marginOn: $("marginOn").checked, margin: $("margin").value,
       rough: false, fixRough: false, fitArtboard: $("fitArtboard").checked,
       overwrite: $("overwrite").checked
     };
@@ -593,9 +595,9 @@
 
   function saveForm() {
     var f = {};
-    ["x", "y", "w", "h", "wp", "hp", "gap"].forEach(function (k) { f[k] = $(k).value; });
+    ["x", "y", "w", "h", "wp", "hp", "gap", "margin"].forEach(function (k) { f[k] = $(k).value; });
     f.wpSet = true;  // パーセントで保存した印（前の版のプルダウンの番号は使わない）
-    ["fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) { f[k] = $(k).checked; });
+    ["marginOn", "fitArtboard", "overwrite", "createRough", "createRaster"].forEach(function (k) { f[k] = $(k).checked; });
     save("create", f);
   }
 
