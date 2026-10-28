@@ -1,6 +1,6 @@
 ﻿#target illustrator
 /*
- * ポロライドテーブル自動作成.jsx
+ * テーブル自動作成.jsx
  * キャラクター用の基礎ステータス表を自動で作成する
  *
  * 使い方：Illustrator で ファイル → スクリプト → その他のスクリプト… からこのファイルを選択
@@ -33,7 +33,8 @@
             { label: "50%（半分）", value: 1 / 2 },
             { label: "33%（3分の1）", value: 1 / 3 }
         ],
-        settingsFile: Folder.userData + "/PolaroidTable_layout.txt",  // 前回入力した値を覚えておくファイル
+        settingsFile: Folder.userData + "/AutoTable_layout.txt",  // 前回入力した値を覚えておくファイル
+        oldSettingsFile: Folder.userData + "/PolaroidTable_layout.txt",  // 名前を変える前（1.6.3 まで）のファイル。新しいファイルがなければこちらを読む
 
         // このレイヤーがドキュメントにあれば、その長方形を使う（「テーブル」の長方形をマス目に加工する）
         layerNames: { outer: "下地", header: "ヘッダー", table: "テーブル", image: "キャラ画像" },  // キャラ画像はテーブルの上の別レイヤー
@@ -319,7 +320,7 @@
     // ================================================================
 
     function showDialog() {
-        var dlg = new Window("dialog", "ポロライドテーブル自動作成");
+        var dlg = new Window("dialog", "テーブル自動作成");
         dlg.alignChildren = "fill";
 
         var dataPanel = dlg.add("panel", undefined, "データ");
@@ -545,6 +546,7 @@
     function loadLayout() {
         var l = { x: CONFIG.layout.x, y: CONFIG.layout.y, w: CONFIG.layout.w, h: CONFIG.layout.h, wr: 0, hr: 0 };
         var f = new File(CONFIG.settingsFile);
+        if (!f.exists) f = new File(CONFIG.oldSettingsFile);
         try {
             if (f.exists && f.open("r")) {
                 var v = f.read().split(",");

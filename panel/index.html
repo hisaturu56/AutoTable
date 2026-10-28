@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>ポロライドテーブル自動作成</title>
+<title>テーブル自動作成</title>
 <style>
   :root { --bg: #323232; --fg: #e0e0e0; --field: #262626; --btn: #454545; --btn-hover: #555555;
           --line: #5a5a5a; --note: #a0a0a0; --accent: #4b8ad8; }
@@ -980,7 +980,7 @@
   // 設定はパネルを閉じても残るように保存する（保存できない環境でも動くように）
   function load(key, fallback) {
     try {
-      var v = localStorage.getItem("polaroidtable." + key);
+      var v = localStorage.getItem("autotable." + key);
       if (v === null) return fallback;
       var parsed = JSON.parse(v);
       if (fallback && typeof fallback === "object" && parsed && typeof parsed === "object") {
@@ -992,7 +992,7 @@
     }
   }
   function save(key, value) {
-    try { localStorage.setItem("polaroidtable." + key, JSON.stringify(value)); } catch (e) {}
+    try { localStorage.setItem("autotable." + key, JSON.stringify(value)); } catch (e) {}
   }
 
   // Illustrator の明るさ設定に合わせて色を変える

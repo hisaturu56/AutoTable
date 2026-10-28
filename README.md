@@ -1,9 +1,9 @@
-# ポロライドテーブル自動作成（PolaroidTable）
+# テーブル自動作成（AutoTable）
 
 Illustrator で、キャラクター用の基礎ステータス表を自動で作成するスクリプトです。
 動画（無限大ANANTA の解説動画など）で使う表を、文字と画像まで入れて PNG で書き出すところまで行います。
 
-今のパネルのバージョン：**1.6.3**（2026-10-26 ひとまず完成）
+今のパネルのバージョン：**1.7.0**（2026-10-28 名前を「テーブル自動作成」に変えた）
 
 ## ふだんの使い方（流れ）
 
@@ -17,14 +17,14 @@ Illustrator で、キャラクター用の基礎ステータス表を自動で�
 
 | ファイル | 内容 |
 | --- | --- |
-| [PolaroidTable.zxp](download/PolaroidTable.zxp) | **パネル本体**。ZXP UXP installer にドラッグ＆ドロップして入れる（おすすめ） |
-| [PolaroidTable_panel.zip](download/PolaroidTable_panel.zip) | ZXP が使えないとき用。展開して `install.bat` をダブルクリック |
+| [AutoTable.zxp](download/AutoTable.zxp) | **パネル本体**。ZXP UXP installer にドラッグ＆ドロップして入れる（おすすめ） |
+| [AutoTable_panel.zip](download/AutoTable_panel.zip) | ZXP が使えないとき用。展開して `install.bat` をダブルクリック |
 | [samples/](samples) | 試しに使える CSV（テスト用台本の 5 つの表など） |
 
 リンクを開いて、右上の「…」または「Download raw file」（↓のボタン）で保存します。
 全部まとめてほしいときは、このページの上の緑の「Code」→「Download ZIP」で、リポジトリ全体を zip でダウンロードできます。
 
-入れたら Illustrator を再起動して、「ウィンドウ」→「エクステンション」→「ポロライドテーブル自動作成」を開きます。
+入れたら Illustrator を再起動して、「ウィンドウ」→「エクステンション」→「テーブル自動作成」を開きます。
 
 ## パネル（おすすめ）
 
@@ -36,36 +36,37 @@ Illustrator の「ウィンドウ」メニューから開いて、出しっぱ�
 | 調整 | 上の「対象の表」でチェックした表に**まとめて**操作する。**キャラ画像をまとめて入れる・変える…**（表ごとに画面が順に出る。行ごとに「選ぶ…」「なし」。Notion・CSV の「画像」に書いたファイル名が「素材」フォルダにあれば最初から入る予定。今の画像は「そのまま」なら調整した位置・大きさも残る。キャラ欄がない表・キャンセルした表・変えなかった表は、終わったあとに知らせる）。**文字の大きさ**（チェックした表の文字をまとめて同じ pt に）。**キャラ画像の位置**は 1 枚ずつ：画像を選び、拡大率・横・縦をスライダーか数値で調整、マスに合わせる・上ぞろえ・同じ表の画像を全部同じにする・チェックした表の画像を全部同じにする・画像を差し替える、画像なしのキャラ欄には「画像を入れる…」。Illustrator で画像をクリックしてからパネルに戻ると、その画像に切り替わる。元に戻すのは Ctrl+Z |
 | 書き出し | 書き出すアートボードにチェックを入れて「PNG で書き出す」（最初は今のアートボードだけにチェック。全部選ぶ・全部外すあり）。「素材」フォルダへ、アートボード名のファイル名で保存 |
 
-中の処理は、下のスクリプトと同じです（表を作るは `ポロライドテーブル自動作成.jsx` をパネルの設定で実行、画像調整・書き出しは `panel/host.jsx` に同じ計算・書き出し方を入れてある）。
+中の処理は、下のスクリプトと同じです（表を作るは `テーブル自動作成.jsx` をパネルの設定で実行、画像調整・書き出しは `panel/host.jsx` に同じ計算・書き出し方を入れてある）。
 
 ### 入れ方（おすすめ：ZXP UXP installer）
 
-1. `PolaroidTable.zxp` をダウンロードする
-2. ZXP UXP installer を開いて、`PolaroidTable.zxp` をドラッグ＆ドロップする（または「開く」から選ぶ）
-3. Illustrator を再起動して、「ウィンドウ」→「エクステンション」→「ポロライドテーブル自動作成」を開く
+1. `AutoTable.zxp` をダウンロードする
+2. ZXP UXP installer を開いて、`AutoTable.zxp` をドラッグ＆ドロップする（または「開く」から選ぶ）
+3. Illustrator を再起動して、「ウィンドウ」→「エクステンション」→「テーブル自動作成」を開く
 
 - 新しい `.zxp` が来たら、同じように入れれば上書きされる。消すときも ZXP UXP installer から
+- **1.6.3 までの「ポロライドテーブル自動作成」（PolaroidTable）が入っているときは、ZXP UXP installer で先にそれを消す**（名前と ID を変えたので、別のパネルとして 2 つ並んでしまう）。Notion のトークンと、表を作るときの位置・大きさの値は、前のものをそのまま読むので入れ直さなくてよい。パネルの中の設定（データの選び方・チェックなど）は最初の状態に戻る
 - `.zxp` には自己署名の証明書で署名している（`tools/SignZxp.java`。Adobe の ZXPSignCmd と同じ形式）。インストーラーで「発行元を確認できない」などの注意が出ても、そのまま進めてよい
 - パネルが出ないときは、下の `install.bat` を 1 回実行する（署名なしのパネルを読み込む設定もするため）
 
 ### 入れ方（ZXP が使えないとき：install.bat）
 
-1. `PolaroidTable_panel.zip` を展開する（右クリック →「すべて展開」）
+1. `AutoTable_panel.zip` を展開する（右クリック →「すべて展開」）
 2. 中の `install.bat` をダブルクリックする（「Windows によって PC が保護されました」と出たら「詳細情報」→「実行」）
 3. Illustrator を再起動する
-4. 「ウィンドウ」→「エクステンション」→「ポロライドテーブル自動作成」を開く
+4. 「ウィンドウ」→「エクステンション」→「テーブル自動作成」を開く
 
-- スクリプトが新しくなったら、新しい zip で 1〜3 をやり直す（上書きされる）
+- スクリプトが新しくなったら、新しい zip で 1〜3 をやり直す（上書きされる）。1.6.3 までの古い名前のパネル（PolaroidTable）は install.bat が消す
 - 消すときは `uninstall.bat` をダブルクリック
 - `install.bat` は、署名していない手作りのパネルを Illustrator が読み込めるようにする設定（PlayerDebugMode）も一緒に行う
-- `.zxp` と zip は `python3 tools/build_panel.py` で作る（`dist/PolaroidTable.zxp`・`dist/PolaroidTable_panel.zip`。Java 17 以降が必要）。中のスクリプトは `scripts/` のコピー
+- `.zxp` と zip は `python3 tools/build_panel.py` で作る（`dist/AutoTable.zxp`・`dist/AutoTable_panel.zip`。Java 17 以降が必要）。中のスクリプトは `scripts/` のコピー
 
 ### Notion から作る
 
 Premiere の「ポロライドテロップボックス_テロップ自動作成」と同じしくみです。
 
 1. **トークンを登録（最初の 1 回）**：「表を作る」タブの「Notion の設定（トークン）」を開き、Premiere と同じコネクション「レターボックス_自動テロップ」のトークンを入れて「登録する」
-   - Windows の暗号化（DPAPI）で `%APPDATA%\PolaroidTable\notion-token.dat` にしまう（同じ Windows ユーザーでしか元に戻せない）。画面には出さない
+   - Windows の暗号化（DPAPI）で `%APPDATA%\AutoTable\notion-token.dat` にしまう（同じ Windows ユーザーでしか元に戻せない）。画面には出さない
 2. **台本を自動で選ぶ**：ドキュメント名と、配置した画像などのファイル名を台本DB のタイトルとくらべ、いちばん近い台本を選ぶ
    - 似ている度合い 50% 以上のうちで最も近いもの。ほぼ同じ近さ（差 5% 以内）なら公開日が今日に近いもの
    - 選んだ理由（どの名前で当たったか）が下に出る
@@ -79,7 +80,7 @@ Premiere の「ポロライドテロップボックス_テロップ自動作成�
 
 ## 使い方（スクリプトとして実行する場合）
 
-1. `scripts/ポロライドテーブル自動作成.jsx` を PC に保存する
+1. `scripts/テーブル自動作成.jsx` を PC に保存する
 2. Illustrator で「ファイル → スクリプト → その他のスクリプト…」からこのファイルを選ぶ
 3. ダイアログで設定して OK
 
@@ -244,8 +245,8 @@ images/タフィー.png,タフィー,9190,6838,5735,7132
 
 ```
 download/                     ダウンロード用（ここから入れる）
-  PolaroidTable.zxp             パネル（ZXP UXP installer で入れる）
-  PolaroidTable_panel.zip       パネル（install.bat で入れる予備）
+  AutoTable.zxp             パネル（ZXP UXP installer で入れる）
+  AutoTable_panel.zip       パネル（install.bat で入れる予備）
 
 samples/                      試しに使える CSV（数値などはすべて仮）
   基礎ステータス_サンプル.csv     CSV の書き方の例
@@ -256,7 +257,7 @@ tables/                       本番の表データ（Notion の台本から作�
 
 panel/                        パネルの中身（index.html：画面、host.jsx：Illustrator 側の処理、notion.js：Notion を読む、match.js：台本を選ぶ、token.js：トークンをしまう）
 scripts/                      スクリプト（パネルを使わず、ファイル → スクリプト から実行するとき）
-  ポロライドテーブル自動作成.jsx   表を作る
+  テーブル自動作成.jsx   表を作る
   キャラ画像の調整.jsx            キャラ画像の拡大率と位置を調整する
   表の書き出し.jsx                アートボードを選んで PNG で書き出す
 

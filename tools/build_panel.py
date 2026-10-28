@@ -1,7 +1,7 @@
 """パネルのインストール用ファイルを作る。
 
-- dist/PolaroidTable.zxp        ZXP UXP installer などで入れる署名付きファイル（おすすめ）
-- dist/PolaroidTable_panel.zip  install.bat で入れる zip（ZXP が使えないとき用）
+- dist/AutoTable.zxp        ZXP UXP installer などで入れる署名付きファイル（おすすめ）
+- dist/AutoTable_panel.zip  install.bat で入れる zip（ZXP が使えないとき用）
 
 できたファイルは download/ にもコピーする（GitHub からダウンロードできるように、download/ は git に入れる）
 
@@ -11,8 +11,8 @@
 zip の中身：
   install.bat               ダブルクリックでパネルを入れる
   uninstall.bat             パネルを消す
-  PolaroidTable/            パネル本体（panel/ の中身 + scripts/ のスクリプト）
-    jsx/create_table.jsx    scripts/ポロライドテーブル自動作成.jsx のコピー
+  AutoTable/                パネル本体（panel/ の中身 + scripts/ のスクリプト）
+    jsx/create_table.jsx    scripts/テーブル自動作成.jsx のコピー
     jsx/adjust_images.jsx   scripts/キャラ画像の調整.jsx のコピー
     jsx/export_png.jsx      scripts/表の書き出し.jsx のコピー
 
@@ -26,14 +26,14 @@ import zipfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
 DOWNLOAD = ROOT / "download"
-OUT = DIST / "PolaroidTable_panel.zip"
-ZXP = DIST / "PolaroidTable.zxp"
-STAGE = DIST / "PolaroidTable"
+OUT = DIST / "AutoTable_panel.zip"
+ZXP = DIST / "AutoTable.zxp"
+STAGE = DIST / "AutoTable"
 CERT = ROOT / "tools" / "zxp-cert.p12"
-CERT_PASSWORD = "polaroidtable"  # 自己署名の証明書用（秘密の情報ではない）
+CERT_PASSWORD = "polaroidtable"  # 自己署名の証明書用（秘密の情報ではない。名前を変える前に作った証明書なので古い名前のまま）
 
 SCRIPTS = {
-    "create_table.jsx": "ポロライドテーブル自動作成.jsx",
+    "create_table.jsx": "テーブル自動作成.jsx",
     "adjust_images.jsx": "キャラ画像の調整.jsx",
     "export_png.jsx": "表の書き出し.jsx",
 }
@@ -41,8 +41,10 @@ SCRIPTS = {
 INSTALL = r"""@echo off
 chcp 65001 >nul
 setlocal
-set "SRC=%~dp0PolaroidTable"
-set "DEST=%APPDATA%\Adobe\CEP\extensions\PolaroidTable"
+set "SRC=%~dp0AutoTable"
+set "DEST=%APPDATA%\Adobe\CEP\extensions\AutoTable"
+rem 名前を変える前（1.6.3 まで）のパネルは消す（2 つ出ないように）
+if exist "%APPDATA%\Adobe\CEP\extensions\PolaroidTable" rmdir /s /q "%APPDATA%\Adobe\CEP\extensions\PolaroidTable"
 
 rem 署名なしのパネルを読み込めるようにする（Illustrator のバージョンごとの設定）
 for %%v in (9 10 11 12 13 14) do reg add "HKCU\Software\Adobe\CSXS.%%v" /v PlayerDebugMode /t REG_SZ /d 1 /f >nul
@@ -56,18 +58,18 @@ if errorlevel 1 (
 )
 
 echo.
-echo ポロライドテーブル自動作成のパネルをインストールしました。
+echo テーブル自動作成のパネルをインストールしました。
 echo Illustrator を再起動して、
-echo 「ウィンドウ」→「エクステンション」→「ポロライドテーブル自動作成」を開いてください。
+echo 「ウィンドウ」→「エクステンション」→「テーブル自動作成」を開いてください。
 echo.
 pause
 """
 
 UNINSTALL = r"""@echo off
 chcp 65001 >nul
-set "DEST=%APPDATA%\Adobe\CEP\extensions\PolaroidTable"
+set "DEST=%APPDATA%\Adobe\CEP\extensions\AutoTable"
 if exist "%DEST%" rmdir /s /q "%DEST%"
-echo ポロライドテーブル自動作成のパネルを削除しました。Illustrator を再起動してください。
+echo テーブル自動作成のパネルを削除しました。Illustrator を再起動してください。
 pause
 """
 
@@ -77,7 +79,7 @@ def crlf(text):
 
 
 def stage():
-    """パネルのフォルダ（panel/ + スクリプト）を dist/PolaroidTable に組み立てる"""
+    """パネルのフォルダ（panel/ + スクリプト）を dist/AutoTable に組み立てる"""
     if STAGE.exists():
         shutil.rmtree(STAGE)
     shutil.copytree(ROOT / "panel", STAGE)
@@ -92,16 +94,16 @@ def build_zip():
         z.writestr("uninstall.bat", crlf(UNINSTALL))
         for path in sorted(STAGE.rglob("*")):
             if path.is_file():
-                z.write(path, "PolaroidTable/" + path.relative_to(STAGE).as_posix())
+                z.write(path, "AutoTable/" + path.relative_to(STAGE).as_posix())
     print(OUT)
 
 
 def build_zxp():
     if not CERT.exists():
-        subprocess.run(["keytool", "-genkeypair", "-alias", "polaroidtable", "-keyalg", "RSA", "-keysize", "2048",
+        subprocess.run(["keytool", "-genkeypair", "-alias", "autotable", "-keyalg", "RSA", "-keysize", "2048",
                         "-validity", "9125", "-storetype", "PKCS12", "-keystore", str(CERT),
                         "-storepass", CERT_PASSWORD, "-keypass", CERT_PASSWORD,
-                        "-dname", "CN=PolaroidTable, O=hisaturu56, C=JP"], check=True)
+                        "-dname", "CN=AutoTable, O=hisaturu56, C=JP"], check=True)
     # ignoreLineBreaks：署名の値を改行なしで書く（ほかのツールでも読みやすい形）
     subprocess.run(["java", "-Dcom.sun.org.apache.xml.internal.security.ignoreLineBreaks=true", str(ROOT / "tools" / "SignZxp.java"), str(STAGE), str(ZXP), str(CERT), CERT_PASSWORD],
                    check=True)

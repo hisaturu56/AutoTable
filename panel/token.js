@@ -2,7 +2,8 @@
  * token.js（パネル用）
  * Notion のトークンを、Windows の暗号化（DPAPI）でパソコンの中にしまう
  *
- * - 保存先：%APPDATA%\PolaroidTable\notion-token.dat（暗号化した文字。同じ Windows ユーザーでしか元に戻せない）
+ * - 保存先：%APPDATA%\AutoTable\notion-token.dat（暗号化した文字。同じ Windows ユーザーでしか元に戻せない）
+ *   名前を変える前（1.6.3 まで）の %APPDATA%\PolaroidTable\notion-token.dat があれば、新しい場所になければそちらを読む
  * - 暗号化と元に戻すのは PowerShell の ConvertTo-SecureString / ConvertFrom-SecureString で行う
  *   トークンはコマンドの文字に入れず、標準入力で渡す（ほかのプログラムから見えないように）
  * - 一度読んだトークンは、パネルを開いている間だけ覚えておく
@@ -17,11 +18,19 @@
     return req(name);
   }
 
-  function filePath() {
+  function filePath(folder) {
     var path = nodeRequire("path");
     var base = (typeof process !== "undefined" && process.env && process.env.APPDATA) || "";
     if (!base) throw new Error("トークンの保存場所（APPDATA）がわかりません。Windows でのみ使えます。");
-    return path.join(base, "PolaroidTable", "notion-token.dat");
+    return path.join(base, folder || "AutoTable", "notion-token.dat");
+  }
+
+  // 読むファイル：新しい場所になければ、名前を変える前の場所
+  function readPath() {
+    var fs = nodeRequire("fs");
+    if (fs.existsSync(filePath())) return filePath();
+    if (fs.existsSync(filePath("PolaroidTable"))) return filePath("PolaroidTable");
+    return null;
   }
 
   // PowerShell に script を実行させ、input を標準入力で渡して、出力を返す
@@ -61,28 +70,29 @@
 
   function load() {
     if (cache) return Promise.resolve(cache);
-    var fs;
+    var fs, file;
     try {
       fs = nodeRequire("fs");
-      if (!fs.existsSync(filePath())) return Promise.resolve(null);
+      file = readPath();
+      if (!file) return Promise.resolve(null);
     } catch (e) {
       return Promise.reject(e);
     }
-    return powershell(DECRYPT, fs.readFileSync(filePath(), "utf8")).then(function (token) {
+    return powershell(DECRYPT, fs.readFileSync(file, "utf8")).then(function (token) {
       cache = token || null;
       return cache;
     });
   }
 
   function exists() {
-    try { return !!cache || nodeRequire("fs").existsSync(filePath()); } catch (e) { return false; }
+    try { return !!cache || !!readPath(); } catch (e) { return false; }
   }
 
   function remove() {
     cache = null;
     try {
       var fs = nodeRequire("fs");
-      if (fs.existsSync(filePath())) fs.unlinkSync(filePath());
+      [filePath(), filePath("PolaroidTable")].forEach(function (f) { if (fs.existsSync(f)) fs.unlinkSync(f); });
     } catch (e) {}
   }
 

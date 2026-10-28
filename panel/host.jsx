@@ -2,7 +2,7 @@
  * host.jsx（パネル用）
  * パネル（index.html）から呼ばれる Illustrator 側の処理。結果は JSON の文字列で返す
  *
- * - 表を作る：jsx/create_table.jsx（ポロライドテーブル自動作成.jsx）を、パネルの設定で実行する
+ * - 表を作る：jsx/create_table.jsx（テーブル自動作成.jsx）を、パネルの設定で実行する
  * - 画像調整：キャラ画像の拡大率・位置を変える（キャラ画像の調整.jsx と同じ計算）
  * - 書き出し：アートボードを「素材」フォルダへ PNG で書き出す（表の書き出し.jsx と同じ書き出し方）
  */
@@ -10,8 +10,8 @@
 $.global.PT = (function () {  // $.evalFile で読み込んでも、どこからでも PT で呼べるように
     var IMAGE_LAYER = "キャラ画像";
     var TABLE_LAYER = "テーブル";
-    var ROUGH_SIZE = 1;  // ラフの大きさ（px。ポロライドテーブル自動作成の CONFIG.rough.size と同じ）
-    var NUMBER_RATIO = 46 / 40;  // 数字の大きさ ÷ 文字の大きさ（ポロライドテーブル自動作成の CONFIG と同じ割合）
+    var ROUGH_SIZE = 1;  // ラフの大きさ（px。テーブル自動作成の CONFIG.rough.size と同じ）
+    var NUMBER_RATIO = 46 / 40;  // 数字の大きさ ÷ 文字の大きさ（テーブル自動作成の CONFIG と同じ割合）
     var MATERIAL_FOLDER = "素材";
     var IMAGE_FILTER = "画像:*.png;*.jpg;*.jpeg;*.psd;*.tif;*.tiff;*.ai;*.eps;*.pdf;*.svg";
 
@@ -175,7 +175,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
     var FINISHED_NAME = "土台（画像）";
     var ROUGH_NOTE = "ラフ";  // ラフをかけた形の note（二重にかけないように）
     var ROUGH_XML = '<LiveEffect name="Adobe Roughen"><Dict data="R asiz ' + ROUGH_SIZE + ' R size ' + ROUGH_SIZE
-                  + ' R absoluteness 1 R dtal 100 R roundness 0 "/></LiveEffect>';  // ポロライドテーブル自動作成のラフと同じ設定
+                  + ' R absoluteness 1 R dtal 100 R roundness 0 "/></LiveEffect>';  // テーブル自動作成のラフと同じ設定
 
     // アートボードの表の仕上げ。rough：下地・ヘッダー・マスにラフをかける／raster：土台を 72 ppi の画像 1 枚にする（くっつける）
     //   ラフだけのとき：ラフを「アピアランスを分割」で固定する

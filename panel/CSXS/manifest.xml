@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="7.0" ExtensionBundleId="com.hisaturu.polaroidtable" ExtensionBundleVersion="1.6.3"
-                   ExtensionBundleName="PolaroidTable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.hisaturu.autotable" ExtensionBundleVersion="1.7.0"
+                   ExtensionBundleName="AutoTable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
-    <Extension Id="com.hisaturu.polaroidtable.panel" Version="1.6.3"/>
+    <Extension Id="com.hisaturu.autotable.panel" Version="1.7.0"/>
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
@@ -17,7 +17,7 @@
     </RequiredRuntimeList>
   </ExecutionEnvironment>
   <DispatchInfoList>
-    <Extension Id="com.hisaturu.polaroidtable.panel">
+    <Extension Id="com.hisaturu.autotable.panel">
       <DispatchInfo>
         <Resources>
           <MainPath>./index.html</MainPath>
@@ -32,7 +32,7 @@
         </Lifecycle>
         <UI>
           <Type>Panel</Type>
-          <Menu>ポロライドテーブル自動作成</Menu>
+          <Menu>テーブル自動作成</Menu>
           <Geometry>
             <Size>
               <Height>820</Height>
