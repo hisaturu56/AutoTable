@@ -10,6 +10,14 @@
 $.global.PT = (function () {  // $.evalFile で読み込んでも、どこからでも PT で呼べるように
     var IMAGE_LAYER = "キャラ画像";
     var TABLE_LAYER = "テーブル";
+    // 数字だけのマス（%・+・- 付きも。「なし」は「-」で入っている）と、文字にまざった数字の部分（テーブル自動作成の cellTextInfo と同じ決まり）
+    var NUMBER_RE = /^[-+]?[\d,]+(\.\d+)?%?$/;
+    function numberChars(text) {
+        var flags = [], re = /[-+]?\d[\d,]*(\.\d+)?%?/g, m;
+        for (var i = 0; i < text.length; i++) flags.push(false);
+        while ((m = re.exec(text)) !== null) for (var k = m.index; k < m.index + m[0].length; k++) flags[k] = true;
+        return flags;
+    }
     var ROUGH_SIZE = 1;  // ラフの大きさ（px。テーブル自動作成の CONFIG.rough.size と同じ）
     var MATERIAL_FOLDER = "素材";
     var IMAGE_FILTER = "画像:*.png;*.jpg;*.jpeg;*.psd;*.tif;*.tiff;*.ai;*.eps;*.pdf;*.svg";
@@ -96,8 +104,19 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         var texts = tableTexts(doc, board);
         var r = { count: texts.length, text: null, number: null, texts: 0, numbers: 0 };
         for (var i = 0; i < texts.length; i++) {
-            var size = texts[i].tf.textRange.characterAttributes.size;
-            if (texts[i].isNumber) { r.numbers++; if (r.number === null) r.number = size; }
+            var t = texts[i];
+            if (t.numberFlags) {
+                // 文字と数字がまざったマス：文字の部分と数字の部分の大きさを別々に見る
+                r.texts++;
+                for (var k = 0; k < t.numberFlags.length; k++) {
+                    var cs = t.tf.textRange.characters[k].characterAttributes.size;
+                    if (t.numberFlags[k]) { if (r.number === null) r.number = cs; }
+                    else if (r.text === null) r.text = cs;
+                }
+                continue;
+            }
+            var size = t.tf.textRange.characterAttributes.size;
+            if (t.isNumber) { r.numbers++; if (r.number === null) r.number = size; }
             else { r.texts++; if (r.text === null) r.text = size; }
         }
         return json(r);
@@ -111,6 +130,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         var texts = tableTexts(doc, board);
         for (var i = 0; i < texts.length; i++) {
             var t = texts[i];
+            if (t.numberFlags) { setMixedSize(t, mode, value); continue; }
             if ((mode === "text" && t.isNumber) || (mode === "number" && !t.isNumber)) continue;
             var size = t.tf.textRange.characterAttributes.size;
             var next = mode === "scale" ? size * value : value;
@@ -124,6 +144,22 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         }
         app.redraw();
         return getTextSize(board);
+    }
+
+    // 文字と数字がまざったマス：1 文字ずつ、文字の部分・数字の部分のどちらかを変える
+    // 位置は、最初に変えた文字の倍率で、マスの中央に保つ（文字と数字の倍率が違うときは少しずれることがある）
+    function setMixedSize(t, mode, value) {
+        var f = null, a = t.tf.anchor;
+        for (var k = 0; k < t.numberFlags.length; k++) {
+            var isNum = t.numberFlags[k];
+            if ((mode === "text" && isNum) || (mode === "number" && !isNum)) continue;
+            var attr = t.tf.textRange.characters[k].characterAttributes;
+            var size = attr.size;
+            var next = mode === "scale" ? size * value : value;
+            if (f === null) f = next / size;
+            attr.size = next;
+        }
+        if (f !== null && Math.abs(f - 1) >= 0.0001) t.tf.translate((t.cx - a[0]) * (1 - f), (t.cy - a[1]) * (1 - f));
     }
 
     // アートボードの中にある「テーブル」レイヤーのマスの文字（マスの中心も一緒に）
@@ -143,7 +179,11 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
                         if (cx < r[0] || cx > r[2] || cy > r[1] || cy < r[3]) continue;
                         for (var t = 0; t < group.textFrames.length; t++) {
                             var tf = group.textFrames[t];
-                            list.push({ tf: tf, cx: cx, cy: cy, isNumber: /^-?[\d,]+(\.\d+)?$/.test(tf.contents) });
+                            var isNumber = NUMBER_RE.test(tf.contents) || tf.contents === "-";
+                            var flags = isNumber ? null : numberChars(tf.contents);
+                            var mixed = false;
+                            if (flags) for (var k = 0; k < flags.length; k++) if (flags[k]) mixed = true;
+                            list.push({ tf: tf, cx: cx, cy: cy, isNumber: isNumber, numberFlags: mixed ? flags : null });
                         }
                     }
                 }

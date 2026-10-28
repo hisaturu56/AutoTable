@@ -88,8 +88,10 @@
         defaultFitArtboard: true       // ダイアログの初期値：アートボードを表にぴったり合わせる
     };
 
-    // パネルから呼ばれたときは、パネルの設定を使う（ダイアログは出さない）
+    var NUMBER_RE = /^[-+]?[\d,]+(\.\d+)?%?$/;  // 数字だけのマス（%・+・- 付きも）。cellTextInfo を参照
+    var DASH_RE = /^(なし|無し|[-－ー―—‐])$/;      // 「なし」など。半角の「-」にする
     var TEXT_NOTE = "自動の大きさ:";  // マスの文字の note（自動で決めた pt。作り直すときに、調整した文字の大きさの割合を出すのに使う）
+    // パネルから呼ばれたときは、パネルの設定を使う（ダイアログは出さない）
     var panelMode = !!$.global.PT_CREATE_OPTIONS;
     var opts = panelMode ? panelOptions($.global.PT_CREATE_OPTIONS) : showDialog();
     if (!opts) return;
@@ -785,26 +787,56 @@
         return widths;
     }
 
-    // 1 行目（項目名）を除いて、数字か空だけで、数字が 1 つ以上ある列か
+    // 1 行目（項目名）を除いて、数字か「なし」か空だけで、数字が 1 つ以上ある列か
     function isNumberColumn(index) {
         var found = false;
         for (var r = 1; r < opts.rows; r++) {
             var v = data[r] ? trim(data[r][index] || "") : "";
             if (!v) continue;
-            var text = CONFIG.text.formatNumbers ? formatNumber(v) : v;
-            if (!/^-?[\d,]+(\.\d+)?$/.test(text)) return false;
-            found = true;
+            var info = cellTextInfo(v);
+            if (!info.isNumber) return false;
+            if (info.text !== "-") found = true;  // 「なし」（-）だけの列は数字の列にしない
         }
         return found;
     }
 
+    // マスの文字の種類（1.8.10 から）
+    //   数字だけ（%・+・- 付きも。例 280%、+10）→ isNumber。ぜんぶ数字のフォント
+    //   「なし」「-」「ー」など → 半角の「-」にして、数字のフォント
+    //   文字と数字がまざる（例 攻撃力25%アップ、CT 8秒）→ runs（数字の部分の [始まり, 長さ]）だけ数字のフォント・数字の大きさ
+    function cellTextInfo(value) {
+        var text = trim(String(value));
+        if (DASH_RE.test(text)) return { text: "-", isNumber: true, runs: [] };
+        if (CONFIG.text.formatNumbers) text = formatNumber(text);
+        if (NUMBER_RE.test(text)) return { text: text, isNumber: true, runs: [] };
+        var runs = [], re = /[-+]?\d[\d,]*(\.\d+)?%?/g, m;
+        while ((m = re.exec(text)) !== null) runs.push([m.index, m[0].length]);
+        return { text: text, isNumber: false, runs: runs };
+    }
+
+    // 文字の大きさを付ける（数字だけなら数字の大きさ、まざっていれば数字の部分だけ数字のフォント・大きさ）
+    function applyCellSizes(tf, info, textPt, numberPt) {
+        tf.textRange.characterAttributes.size = info.isNumber ? numberPt : textPt;
+        for (var i = 0; i < info.runs.length; i++) {
+            for (var k = info.runs[i][0]; k < info.runs[i][0] + info.runs[i][1]; k++) {
+                var attr = tf.textRange.characters[k].characterAttributes;
+                if (numberFont) attr.textFont = numberFont;
+                attr.size = numberPt;
+            }
+        }
+    }
+
+    function newCellText(container, info) {
+        var tf = container.textFrames.add();
+        tf.contents = info.text;
+        styleText(tf, info.isNumber ? numberFont : textFont, info.isNumber ? CONFIG.number.size : CONFIG.text.size);
+        applyCellSizes(tf, info, CONFIG.text.size, CONFIG.number.size);
+        return tf;
+    }
+
     // 文字を基準の大きさで置いたときの幅（マスに入れるときと同じ書式で測って、すぐ消す）
     function measureText(value) {
-        var text = CONFIG.text.formatNumbers ? formatNumber(value) : value;
-        var isNumber = /^-?[\d,]+(\.\d+)?$/.test(text);
-        var tf = tableLayer.textFrames.add();
-        tf.contents = text;
-        styleText(tf, isNumber ? numberFont : textFont, isNumber ? CONFIG.number.size : CONFIG.text.size);
+        var tf = newCellText(tableLayer, cellTextInfo(value));
         var w = tf.width;
         tf.remove();
         return w;
@@ -818,14 +850,10 @@
 
     // マスに文字を入れる（大きさと位置は、全部のマスを作ったあとに layoutCellTexts でそろえる）
     function addCellText(container, value, top, left, w, h) {
-        var text = CONFIG.text.formatNumbers ? formatNumber(value) : value;
-        var isNumber = /^-?[\d,]+(\.\d+)?$/.test(text);
-
-        var tf = container.textFrames.add();
-        tf.contents = text;
-        styleText(tf, isNumber ? numberFont : textFont, isNumber ? CONFIG.number.size : CONFIG.text.size);
+        var info = cellTextInfo(value);
+        var tf = newCellText(container, info);
         tf.textRange.paragraphAttributes.justification = Justification.CENTER;
-        return { tf: tf, text: text, isNumber: isNumber, top: top, left: left, w: w, h: h };
+        return { tf: tf, text: info.text, isNumber: info.isNumber, info: info, top: top, left: left, w: w, h: h };
     }
 
     // 表全体の文字の大きさをそろえ、各マスの中央に置く。使った倍率を返す
@@ -843,17 +871,22 @@
 
         for (var j = 0; j < list.length; j++) {
             var t = list[j];
-            var base = t.isNumber ? CONFIG.number.size : CONFIG.text.size;
-            t.tf.textRange.characterAttributes.size = base * scale;
-            t.tf.note = TEXT_NOTE + base * scale;  // 自動で決めた大きさ（作り直すときに、調整した割合を引き継ぐため）
-            if (t.isNumber) {
-                // 縦位置はカンマ・小数点を除いた数字だけの形で中央に合わせる
-                alignByGlyphs(t.tf, t.left + t.w / 2, t.top - t.h / 2 - CONFIG.number.offsetY * scale, t.text.replace(/[,.]/g, ""));
-            } else {
-                alignByGlyphs(t.tf, t.left + t.w / 2, t.top - t.h / 2);
-            }
+            t.textPt = CONFIG.text.size * scale;
+            t.numberPt = CONFIG.number.size * scale;
+            applyCellSizes(t.tf, t.info, t.textPt, t.numberPt);
+            t.tf.note = TEXT_NOTE + (t.isNumber ? t.numberPt : t.textPt);  // 自動で決めた大きさ（作り直すときに、調整した割合を引き継ぐため）
+            alignCellText(t, scale);
         }
         return scale;
+    }
+
+    function alignCellText(t, scale) {
+        if (t.isNumber) {
+            // 縦位置はカンマ・小数点を除いた数字だけの形で中央に合わせる
+            alignByGlyphs(t.tf, t.left + t.w / 2, t.top - t.h / 2 - CONFIG.number.offsetY * scale, t.text.replace(/[,.]/g, ""));
+        } else {
+            alignByGlyphs(t.tf, t.left + t.w / 2, t.top - t.h / 2);
+        }
     }
 
     function styleText(tf, font, size) {
@@ -986,7 +1019,8 @@
                         var tf = group.textFrames[k];
                         var auto = tf.note.indexOf(TEXT_NOTE) === 0 ? parseFloat(tf.note.substr(TEXT_NOTE.length)) : NaN;
                         if (!(auto > 0)) continue;
-                        var key = /^-?[\d,]+(\.\d+)?$/.test(tf.contents) ? "numberRatio" : "textRatio";
+                        if (!NUMBER_RE.test(tf.contents) && tf.contents !== "-" && /\d/.test(tf.contents)) continue;  // まざったマスは使わない
+                        var key = NUMBER_RE.test(tf.contents) || tf.contents === "-" ? "numberRatio" : "textRatio";
                         if (t[key] === undefined || (key === "textRatio" && !t.textFound)) {
                             t[key] = tf.textRange.characterAttributes.size / auto;
                             if (key === "textRatio") t.textFound = true;
@@ -1064,6 +1098,14 @@
         if (Math.abs(textRatio - 1) < 0.001 && Math.abs(numberRatio - 1) < 0.001) return false;
         for (var i = 0; i < list.length; i++) {
             var t = list[i];
+            if (t.info.runs.length) {
+                // 文字と数字がまざったマス：文字と数字の部分にそれぞれの割合をかけて、置き直す
+                t.textPt *= textRatio;
+                t.numberPt *= numberRatio;
+                applyCellSizes(t.tf, t.info, t.textPt, t.numberPt);
+                alignCellText(t, textRatio);
+                continue;
+            }
             var ratio = t.isNumber ? numberRatio : textRatio;
             if (Math.abs(ratio - 1) < 0.001) continue;
             var cx = t.left + t.w / 2, cy = t.top - t.h / 2;
