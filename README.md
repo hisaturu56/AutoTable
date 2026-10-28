@@ -245,24 +245,24 @@ images/タフィー.png,タフィー,9190,6838,5735,7132
 
 ```
 download/                     ダウンロード用（ここから入れる）
-  AutoTable.zxp             パネル（ZXP UXP installer で入れる）
-  AutoTable_panel.zip       パネル（install.bat で入れる予備）
+  AutoTable.zxp                 パネル（ZXP UXP installer で入れる）
+  AutoTable_panel.zip           パネル（install.bat で入れる予備）
 
 samples/                      試しに使える CSV（数値などはすべて仮）
   基礎ステータス_サンプル.csv     CSV の書き方の例
   (例)タフィー解説_基礎ステータス.csv
   テスト用台本/                  Notion のテスト用台本から作った 5 つの表
 
-tables/                       本番の表データ（Notion の台本から作った CSV）を置く場所（今は空）
+tables/                       CSV で作るときの本番の表データを置く場所（今は空。ふだんは Notion のテーブルリスト）
 
 panel/                        パネルの中身（index.html：画面、host.jsx：Illustrator 側の処理、notion.js：Notion を読む、match.js：台本を選ぶ、token.js：トークンをしまう）
 scripts/                      スクリプト（パネルを使わず、ファイル → スクリプト から実行するとき）
-  テーブル自動作成.jsx   表を作る
+  テーブル自動作成.jsx            表を作る
   キャラ画像の調整.jsx            キャラ画像の拡大率と位置を調整する
   表の書き出し.jsx                アートボードを選んで PNG で書き出す
 
 docs/                         説明・記録
-  Notionから表データを作る手順.md  表の大きさの決め方と CSV の作り方
+  Notionから表データを作る手順.md  表の大きさの決め方と、テーブルリストへの書き方（CSV は予備）
   計画.md                        開発の計画と、できたこと・残っていること
   開発記録.md                    これまでの変更の記録
   手作業の作成手順メモ.txt        スクリプト化する前の手作業の手順（元の仕様）
@@ -270,7 +270,8 @@ docs/                         説明・記録
 tools/                        パネルのファイルを作る道具（開発用）
   build_panel.py                download/ の .zxp と zip を作る
   SignZxp.java                  .zxp に署名を付ける
+  （署名用の証明書 zxp-cert.p12 は git に入れない。なければ build_panel.py が自動で作る）
 tests/notion_test.js          match.js・notion.js のテスト（node tests/notion_test.js）
-Claudeへの説明_テーブルリスト.md     claude.ai のプロジェクトに入れる、テーブルリストの作り方の説明
+Claudeへの説明_テーブルリスト.md  claude.ai のプロジェクトに入れる、テーブルリストの作り方の説明
 CLAUDE.md                     Claude 向けの作業メモ
 ```
