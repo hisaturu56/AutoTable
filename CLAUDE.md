@@ -11,6 +11,7 @@ Illustrator 用の基礎ステータス表作成スクリプト（`scripts/テ�
 
 ## 決まっていること・注意点
 - **名前は「テーブル自動作成」（英語は AutoTable、ID は `com.hisaturu.autotable`）**。1.6.3 までは「ポロライドテーブル自動作成」（PolaroidTable、`com.hisaturu.polaroidtable`）。トークンと位置・大きさの値は古い場所（`%APPDATA%\PolaroidTable\`・`PolaroidTable_layout.txt`）も読む。GitHub のリポジトリ名は PolaroidTable のまま
+- Premiere のプラグインも「ポロライドテロップボックス_テロップ自動作成」から「**テロップ自動作成**」に名前が変わった（台本の自動選び・トークンのしくみは同じ）
 - **表全体の位置と大きさは、実行時のダイアログで下地の X・Y・幅・高さを入力して決める**（前回の値を記憶）。
   ヘッダー・テーブルは下地から計算（余白 7.5 px、ヘッダー高さ 30 px）。キャラ欄は常に行の高さの正方形
   - 初期値（`CONFIG.layout`）：X 960、Y 540（アートボードの中心）、幅 1505、高さ 592.5。初期値の変更を頼まれたら `CONFIG.layout` と README の表を直す
