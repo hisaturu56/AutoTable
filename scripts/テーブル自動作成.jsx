@@ -25,7 +25,7 @@
         // ヘッダーは 1.8.0 でなくした。表全体のまわりに枠（色を変えられる）を付け、その内側の下地いっぱいにマスを並べる
         // 下地はマスとマスの間にだけ見える。枠なしにすると、マスは表全体いっぱいに並ぶ
         gap: 7.5,                      // マス同士の間隔の初期値。実行時のダイアログ・パネルで変えられる
-        frame: { enabled: true, width: 7.5, color: "#FF0000" },  // 枠の初期値（あり・太さ px・色）。ダイアログ・パネルで変えられる
+        frame: { enabled: true, width: 7.5, color: "#FF0000", name: "枠" },  // 枠の初期値（あり・太さ px・色）。ダイアログ・パネルで変えられる。枠にはラフをかけない
         // 幅・高さの割合（ダイアログのプルダウン）。入力した幅・高さにこの割合をかけた大きさで作る
         ratios: [
             { label: "100%（そのまま）", value: 1 },
@@ -206,8 +206,10 @@
     var outerLayer = findLayer(CONFIG.layerNames.outer);
     var hadOuter = !!(outerLayer && outerLayer.pathItems.length);
     var outerRect = existingOrNewRect(CONFIG.layerNames.outer, specs.outer, frame ? frame.color : CONFIG.colors.outer);
-    if (frame && !hadOuter) {
-        outerRect.name = "枠";
+    var frameMade = frame && !hadOuter;
+    if (frameMade) {
+        outerRect.name = CONFIG.frame.name;
+        roughTargets.pop();  // 枠にはラフをかけない（まっすぐのまま）
         var innerBox = specToBox(specs.body);
         var innerRect = styleRect(outerRect.layer.pathItems.rectangle(innerBox.top, innerBox.left, innerBox.w, innerBox.h),
                                   CONFIG.layerNames.outer, CONFIG.colors.outer);
@@ -289,7 +291,7 @@
 
     var fitted = null;
     if (opts.fitArtboard) {
-        fitted = fitArtboardToTable([outerRect].concat(cells), opts.rough && !roughFailed);
+        fitted = fitArtboardToTable([outerRect].concat(cells), opts.rough && !roughFailed && !frameMade);  // 枠はラフなしでいちばん外側
     }
 
     // ラフを固定する：ラフの効果は画面を描き直すたびに計算されて重いので、「アピアランスを分割」で普通の形に変える

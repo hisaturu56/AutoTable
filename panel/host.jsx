@@ -173,11 +173,12 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
     // ---- 仕上げ：ラフをかけて、土台を 1 枚の画像にする ----
 
     var FINISHED_NAME = "土台（画像）";
+    var FRAME_NAME = "枠";  // まわりの枠（1.9.0 から）。ラフをかけない
     var ROUGH_NOTE = "ラフ";  // ラフをかけた形の note（二重にかけないように）
     var ROUGH_XML = '<LiveEffect name="Adobe Roughen"><Dict data="R asiz ' + ROUGH_SIZE + ' R size ' + ROUGH_SIZE
                   + ' R absoluteness 1 R dtal 100 R roundness 0 "/></LiveEffect>';  // テーブル自動作成のラフと同じ設定
 
-    // アートボードの表の仕上げ。rough：下地・マス（1.7.0 までの表はヘッダーも）にラフをかける／raster：土台を 72 ppi の画像 1 枚にする（くっつける）
+    // アートボードの表の仕上げ。rough：下地・マス（1.7.0 までの表はヘッダーも。まわりの枠にはかけない）にラフをかける／raster：土台を 72 ppi の画像 1 枚にする（くっつける）
     //   ラフだけのとき：ラフを「アピアランスを分割」で固定する
     //   画像にするとき：写しを画像にして（書き出す PNG と同じ解像度なので見た目は同じ）「下地」レイヤーのいちばん下に置き、
     //     元の下地・ヘッダー・マスは隠して残す（マスの位置を、文字の大きさ・キャラ画像の調整に使うため）
@@ -218,7 +219,7 @@ $.global.PT = (function () {  // $.evalFile で読み込んでも、どこから
         if (rough) {
             for (var i = 0; i < items.length; i++) {
                 var it = items[i];
-                if (it.typename === "PathItem" && it.pathPoints.length <= 4 && it.note !== ROUGH_NOTE) {
+                if (it.typename === "PathItem" && it.pathPoints.length <= 4 && it.note !== ROUGH_NOTE && it.name !== FRAME_NAME) {
                     it.applyEffect(ROUGH_XML);
                     it.note = ROUGH_NOTE;
                     roughed.push(it);
