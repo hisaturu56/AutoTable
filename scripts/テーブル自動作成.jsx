@@ -801,36 +801,20 @@
     }
 
     // マスの文字の種類（1.8.10 から）
-    //   数字だけ（%・+・- 付きも。例 280%、+10）→ isNumber。ぜんぶ数字のフォント
+    //   数字だけ（%・+・- 付きも。例 280%、+10）→ isNumber。数字のフォント
     //   「なし」「-」「ー」など → 半角の「-」にして、数字のフォント
-    //   文字と数字がまざる（例 攻撃力25%アップ、CT 8秒）→ runs（数字の部分の [始まり, 長さ]）だけ数字のフォント・数字の大きさ
+    //   文字と数字がまざる（例 攻撃力25%アップ、CT 8秒）→ ふつうの文字と同じ（1.8.10 で数字の部分だけ数字のフォントにしたが、1.8.11 でやめた）
     function cellTextInfo(value) {
         var text = trim(String(value));
-        if (DASH_RE.test(text)) return { text: "-", isNumber: true, runs: [] };
+        if (DASH_RE.test(text)) return { text: "-", isNumber: true };
         if (CONFIG.text.formatNumbers) text = formatNumber(text);
-        if (NUMBER_RE.test(text)) return { text: text, isNumber: true, runs: [] };
-        var runs = [], re = /[-+]?\d[\d,]*(\.\d+)?%?/g, m;
-        while ((m = re.exec(text)) !== null) runs.push([m.index, m[0].length]);
-        return { text: text, isNumber: false, runs: runs };
-    }
-
-    // 文字の大きさを付ける（数字だけなら数字の大きさ、まざっていれば数字の部分だけ数字のフォント・大きさ）
-    function applyCellSizes(tf, info, textPt, numberPt) {
-        tf.textRange.characterAttributes.size = info.isNumber ? numberPt : textPt;
-        for (var i = 0; i < info.runs.length; i++) {
-            for (var k = info.runs[i][0]; k < info.runs[i][0] + info.runs[i][1]; k++) {
-                var attr = tf.textRange.characters[k].characterAttributes;
-                if (numberFont) attr.textFont = numberFont;
-                attr.size = numberPt;
-            }
-        }
+        return { text: text, isNumber: NUMBER_RE.test(text) };
     }
 
     function newCellText(container, info) {
         var tf = container.textFrames.add();
         tf.contents = info.text;
         styleText(tf, info.isNumber ? numberFont : textFont, info.isNumber ? CONFIG.number.size : CONFIG.text.size);
-        applyCellSizes(tf, info, CONFIG.text.size, CONFIG.number.size);
         return tf;
     }
 
@@ -871,10 +855,9 @@
 
         for (var j = 0; j < list.length; j++) {
             var t = list[j];
-            t.textPt = CONFIG.text.size * scale;
-            t.numberPt = CONFIG.number.size * scale;
-            applyCellSizes(t.tf, t.info, t.textPt, t.numberPt);
-            t.tf.note = TEXT_NOTE + (t.isNumber ? t.numberPt : t.textPt);  // 自動で決めた大きさ（作り直すときに、調整した割合を引き継ぐため）
+            var base = t.isNumber ? CONFIG.number.size : CONFIG.text.size;
+            t.tf.textRange.characterAttributes.size = base * scale;
+            t.tf.note = TEXT_NOTE + base * scale;  // 自動で決めた大きさ（作り直すときに、調整した割合を引き継ぐため）
             alignCellText(t, scale);
         }
         return scale;
@@ -1019,7 +1002,6 @@
                         var tf = group.textFrames[k];
                         var auto = tf.note.indexOf(TEXT_NOTE) === 0 ? parseFloat(tf.note.substr(TEXT_NOTE.length)) : NaN;
                         if (!(auto > 0)) continue;
-                        if (!NUMBER_RE.test(tf.contents) && tf.contents !== "-" && /\d/.test(tf.contents)) continue;  // まざったマスは使わない
                         var key = NUMBER_RE.test(tf.contents) || tf.contents === "-" ? "numberRatio" : "textRatio";
                         if (t[key] === undefined || (key === "textRatio" && !t.textFound)) {
                             t[key] = tf.textRange.characterAttributes.size / auto;
@@ -1098,14 +1080,6 @@
         if (Math.abs(textRatio - 1) < 0.001 && Math.abs(numberRatio - 1) < 0.001) return false;
         for (var i = 0; i < list.length; i++) {
             var t = list[i];
-            if (t.info.runs.length) {
-                // 文字と数字がまざったマス：文字と数字の部分にそれぞれの割合をかけて、置き直す
-                t.textPt *= textRatio;
-                t.numberPt *= numberRatio;
-                applyCellSizes(t.tf, t.info, t.textPt, t.numberPt);
-                alignCellText(t, textRatio);
-                continue;
-            }
             var ratio = t.isNumber ? numberRatio : textRatio;
             if (Math.abs(ratio - 1) < 0.001) continue;
             var cx = t.left + t.w / 2, cy = t.top - t.h / 2;
